@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>관리자 | MathSite</title>
+        <link rel="stylesheet" href="/static/shared/style.css" />
+    </head>
+    <body>
+        <header id="header"></header>
+        <main>
+            <h2>관리자</h2>
+            <p id="message" role="status"></p>
+            <section id="management" hidden>
+                <h3>회원 승인·정지</h3>
+                <label>
+                    회원
+                    <select id="member"></select>
+                </label>
+                <button id="approve">승인·정지 해제</button>
+                <button id="suspend">정지</button>
+                <h3>강좌 관리</h3>
+                <label>
+                    강좌
+                    <select id="course"></select>
+                </label>
+                <form id="course-form">
+                    <label>
+                        강좌명
+                        <input name="title" required maxlength="160" />
+                    </label>
+                    <label>
+                        강사
+                        <input name="teacher" maxlength="80" />
+                    </label>
+                    <label>
+                        소개
+                        <textarea name="description" required></textarea>
+                    </label>
+                    <button>선택 강좌 수정</button>
+                    <button id="add-course" type="button">새 강좌 추가</button>
+                    <button id="delete-course" type="button">강좌 삭제</button>
+                </form>
+                <h3>강의 관리</h3>
+                <ul id="lectures"></ul>
+                <form id="lecture-form">
+                    <label>
+                        강의명
+                        <input name="title" required maxlength="160" />
+                    </label>
+                    <label>
+                        설명
+                        <textarea name="description"></textarea>
+                    </label>
+                    <label>
+                        순서
+                        <input name="position" type="number" min="1" value="1" required />
+                    </label>
+                    <label>
+                        영상
+                        <input name="video" type="file" accept="video/mp4,video/webm" required />
+                    </label>
+                    <button>강의 업로드</button>
+                </form>
+                <h3>학생별 시청 권한</h3>
+                <label>
+                    학생
+                    <select id="student"></select>
+                </label>
+                <label>
+                    강의
+                    <select id="lecture"></select>
+                </label>
+                <button id="grant">30일 시청 허용</button>
+                <button id="revoke">권한 회수</button>
+            </section>
+        </main>
+        <script type="module" src="/static/pages/manager/manager.js"></script>
+    </body>
+</html>

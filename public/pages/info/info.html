@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>학원 소개 · Q&A | MathSite</title>
+        <link rel="stylesheet" href="/static/shared/style.css" />
+    </head>
+    <body>
+        <header id="header"></header>
+        <main>
+            <h2>학원 소개 · Q&A</h2>
+            <p id="message" role="status"></p>
+            <p>MathSite는 강좌와 강의 영상을 제공하는 수학 학원 사이트입니다.</p>
+            <h3>Q&A</h3>
+            <p id="guest" hidden>
+                질문을 보거나 작성하려면
+                <a href="/login">로그인</a>
+                하세요.
+            </p>
+            <section id="qna" hidden>
+                <ul id="questions"></ul>
+                <h3 id="question-heading">질문 작성</h3>
+                <form id="question-form">
+                    <label>
+                        제목
+                        <input name="title" maxlength="160" required />
+                    </label>
+                    <label>
+                        내용
+                        <textarea name="content" required></textarea>
+                    </label>
+                    <label>
+                        <input name="isPrivate" type="checkbox" checked />
+                        비공개 질문
+                    </label>
+                    <button id="save-question">저장</button>
+                    <button id="new-question" type="button">새 질문</button>
+                    <button id="delete-question" type="button" hidden>삭제</button>
+                </form>
+                <h3>답변</h3>
+                <p id="answer" class="content"></p>
+                <form id="answer-form" hidden>
+                    <label>
+                        답변
+                        <textarea name="answer" required></textarea>
+                    </label>
+                    <button>답변 저장</button>
+                    <button id="delete-answer" type="button">답변 삭제</button>
+                </form>
+            </section>
+        </main>
+        <script type="module" src="/static/pages/info/info.js"></script>
+    </body>
+</html>

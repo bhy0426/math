@@ -1,0 +1,52 @@
+body {
+    font-family: sans-serif;
+    max-width: 900px;
+    margin: 24px auto;
+    padding: 0 16px;
+}
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 12px;
+}
+label {
+    display: block;
+    margin: 8px 0;
+}
+input,
+textarea,
+select,
+button {
+    font: inherit;
+    padding: 5px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+button {
+    cursor: pointer;
+    margin: 3px;
+}
+textarea {
+    display: block;
+    width: 100%;
+    min-height: 80px;
+}
+section {
+    margin: 20px 0;
+}
+li {
+    margin: 10px 0;
+}
+video {
+    width: 100%;
+    max-width: 640px;
+}
+.content {
+    white-space: pre-wrap;
+}
+[hidden] {
+    display: none !important;
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>공지사항 | MathSite</title>
+        <link rel="stylesheet" href="/static/shared/style.css" />
+    </head>
+    <body>
+        <header id="header"></header>
+        <main>
+            <h2>공지사항</h2>
+            <p id="message" role="status"></p>
+            <ul id="boards"></ul>
+            <section id="detail" hidden>
+                <h3 id="title"></h3>
+                <p id="content" class="content"></p>
+            </section>
+            <section id="editor" hidden>
+                <h3>공지 작성·수정</h3>
+                <form id="board-form">
+                    <label>
+                        제목
+                        <input name="title" maxlength="160" required />
+                    </label>
+                    <label>
+                        내용
+                        <textarea name="content" required></textarea>
+                    </label>
+                    <button>저장</button>
+                    <button id="new-board" type="button">새 공지</button>
+                    <button id="delete-board" type="button">삭제</button>
+                </form>
+            </section>
+        </main>
+        <script type="module" src="/static/pages/boards/boards.js"></script>
+    </body>
+</html>

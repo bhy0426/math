@@ -39,6 +39,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+.local/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -147,3 +148,33 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# MathSite: 비공개 설정, 실제 데이터와 전달용 압축파일
+*.env
+*.env.*
+!.env.example
+uploads/
+backups/
+dumps/
+*.dump
+*.sql.gz
+*.bak
+*.backup
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+# 개인키는 제외하고, 공유용 공개 CA 인증서만 포함
+*.key
+*.p12
+*.pfx
+*.pem
+!database/certs/filess-ca.pem
+id_rsa
+id_ed25519
+
+# 개인 편집기 상태
+.DS_Store
+Thumbs.db
+.vscode/*.local.json

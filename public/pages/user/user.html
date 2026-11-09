@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>내 정보 | MathSite</title>
+        <link rel="stylesheet" href="/static/shared/style.css" />
+    </head>
+    <body>
+        <header id="header"></header>
+        <main>
+            <h2>내 정보</h2>
+            <p id="message" role="status"></p>
+            <form id="profile">
+                <label>
+                    이름
+                    <input name="name" maxlength="80" required />
+                </label>
+                <label>
+                    이메일
+                    <input name="email" type="email" required />
+                </label>
+                <button>저장</button>
+            </form>
+            <p><a id="kakao-link" href="/auth/kakao/link" hidden>현재 계정에 카카오 연결</a></p>
+        </main>
+        <script type="module" src="/static/pages/user/user.js"></script>
+    </body>
+</html>

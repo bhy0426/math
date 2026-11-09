@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>강의 시청 | MathSite</title>
+        <link rel="stylesheet" href="/static/shared/style.css" />
+    </head>
+    <body>
+        <header id="header"></header>
+        <main>
+            <h2>강의 시청</h2>
+            <p id="message" role="status"></p>
+            <p><a id="back">강좌로 돌아가기</a></p>
+            <h3 id="title"></h3>
+            <p id="description"></p>
+            <video id="player" controls preload="metadata"></video>
+        </main>
+        <script type="module" src="/static/pages/courses/lecture.js"></script>
+    </body>
+</html>
