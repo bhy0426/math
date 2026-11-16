@@ -1,6 +1,6 @@
 const { fail } = require('../../shared/helpers');
 
-function authorizationUrl(config, state) {
+function authorizationUrl(config, state, flow = {}) {
     const url = new URL('https://kauth.kakao.com/oauth/authorize');
     url.search = new URLSearchParams({
         response_type: 'code',
@@ -8,6 +8,7 @@ function authorizationUrl(config, state) {
         redirect_uri: config.redirectUri,
         state,
     });
+    if (flow.mode === 'recover') url.searchParams.set('prompt', 'login');
     return url.toString();
 }
 

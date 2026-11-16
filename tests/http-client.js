@@ -4,7 +4,9 @@ function client(baseUrl) {
     return async (method, url, body, extraHeaders = {}) => {
         const multipart = body instanceof FormData;
         const path =
-            url === '/' || url === '/health' || url.startsWith('/auth/kakao') ? url : '/api' + url;
+            url === '/' || url === '/health' || /^\/auth\/(kakao|google)/.test(url)
+                ? url
+                : '/api' + url;
         const response = await fetch(baseUrl() + path, {
             method,
             redirect: 'manual',

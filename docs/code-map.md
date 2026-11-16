@@ -1,66 +1,45 @@
-# 코드 읽는 순서와 파일 묶음
+# 코드 읽는 순서
 
-처음에는 **src/server.js → src/app.js → src/modules/courses/routes.js** 순서로 읽는다.
+처음에는 파일 전체를 외우기보다 요청 한 건을 따라간다. 필요한 함수 설명은 [파일·함수 안내서](functions.md)에서 찾는다.
 
-- server.js: DB를 확인하고 서버 실행
-- app.js: 화면·기능 라우터 연결
-- modules/기능/routes.js: 기능별 요청 처리
+## 1. 가장 짧은 흐름: 관리자 강좌 추가
 
-## 폴더 구조
+1. [app.js](../src/app.js): `/api/courses`를 강좌 라우터에 연결한다.
+2. [courses/routes.js](../src/modules/courses/routes.js): POST 요청을 받고 `requireAdmin` 후 `service.create(req.body)`를 호출한다.
+3. [courses/service.js](../src/modules/courses/service.js)의 `create`: 제목·설명 등을 검사하고 `Course.create`로 저장한다.
+4. [models.js](../src/models.js)의 `Course`: 어떤 속성이 어떤 MySQL 열에 들어갈지 정의한다.
+5. [database.js](../src/database.js): 모델이 사용하는 MySQL 연결이다.
+6. 다시 routes.js: 반환값을 `res.status(201).json(...)`으로 보낸다.
 
 ```text
-MathSite/
-├─ src/                         백엔드
-│  ├─ server.js                 실행 시작점
-│  ├─ app.js                    공통 설정·라우터 연결
-│  ├─ database.js               MySQL 연결
-│  ├─ shared/helpers.js         공통 검증·암호·강의 접근 검사
-│  ├─ middleware/               로그인 상태·요청 출처 검사
-│  └─ modules/                  기능별 모듈
-│     ├─ auth/                  이메일·카카오 인증
-│     │  ├─ routes.js           이메일 인증 경로
-│     │  ├─ controller.js       이메일 인증 처리
-│     │  ├─ kakao.routes.js     카카오 인증 경로
-│     │  ├─ kakao.controller.js 카카오 인증 흐름
-│     │  ├─ kakao.config.js     서버 설정 읽기
-│     │  ├─ kakao.client.js     카카오 서버 통신
-│     │  ├─ kakao.repository.js 회원 연결 SQL
-│     │  └─ session.js          공통 로그인 세션
-│     ├─ courses/
-│     │  ├─ routes.js           강좌
-│     │  └─ lectures.routes.js  강좌 하위 강의·영상
-│     ├─ boards/routes.js       공지
-│     ├─ info/routes.js         Q&A
-│     ├─ manager/routes.js      회원·권한 관리
-│     └─ user/routes.js         내 정보
-├─ public/                      프론트엔드
-│  ├─ shared/                   공통 메뉴·API 호출·CSS
-│  └─ pages/                    화면별 HTML·JS 묶음
-│     ├─ home/                  메인
-│     ├─ auth/                  로그인·추가 가입
-│     ├─ user/                  내 정보
-│     ├─ courses/               강좌 목록·상세·강의 시청
-│     ├─ boards/                공지
-│     ├─ info/                  소개·Q&A
-│     └─ manager/               관리자
-├─ database/schema.sql          DB 테이블 정의
-├─ scripts/                     DB 시작·초기화 도구
-├─ tests/                       Mocha 통합 테스트·합성 영상
-├─ docs/                        코드·카카오 설정 설명
-├─ package.json                 실행 명령·패키지
-└─ .env.example                 비공개 설정의 입력 양식
+POST /api/courses + JSON
+ → routes: 요청 받기
+ → service.create: 검사·저장
+ → Course 모델: DB 열에 매핑
+ → routes: 201 + JSON 응답
 ```
 
-## 수정할 곳
+라우터의 `(req, res)`에서 req는 요청 정보, res는 응답 도구다. 기능 함수의 `(body)`는 필요한 입력만 받는 일반 함수다. 기능 함수는 HTTP 응답 대신 결과를 반환하고, 문제가 있으면 오류를 던진다.
 
-강좌 API는 src/modules/courses/routes.js, 강좌 화면은 public/pages/courses/를 수정한다. 공지·Q&A·회원·관리자도 같은 이름의 폴더에서 찾는다.
+## 2. 그다음 읽을 서버 코드
 
-화면 주소는 /courses, /manager처럼 사용한다. JSON API는 /api/courses, /api/manager 아래에 있다. 카카오 복귀 주소 /auth/kakao/callback은 유지한다.
+| 순서 | 파일                                                           | 확인할 내용                                |
+| ---- | -------------------------------------------------------------- | ------------------------------------------ |
+| 1    | shared/helpers.js                                              | text·id·bool, requireLogin·requireAdmin    |
+| 2    | auth/password.js                                               | 반복 해시 저장·검증                        |
+| 3    | auth/routes.js → auth/register.service.js 또는 auth/service.js | 이메일 가입 또는 일반 로그인·비밀번호 변경 |
+| 4    | auth/account.js → middleware/session-user.js                   | 현재 회원과 세션 버전 검사                 |
+| 5    | manager/member-fields.service.js                               | 항목 ON/OFF 공통 정책                      |
+| 6    | user/routes.js → user/service.js                               | 본인 프로필 수정                           |
+| 7    | manager/routes.js → manager/service.js                         | 관리자 수정·역할·시청 허용                 |
+| 8    | courses/access.js → lectures.service.js                        | 영상별 권한과 재생                         |
+| 9    | auth/social.service.js → google.client.js                      | 소셜 인증·연결·복구                        |
+| 10   | database/migrate.js → tests/*.test.js                          | 기존 DB 준비와 실제 검사                   |
 
-## 코드 정렬
+각 행의 서버 파일은 `src/` 기준이며 이름이 같은 routes.js는 상위 폴더까지 확인한다.
 
-공백 4칸과 LF 줄바꿈을 사용한다. 프로젝트 터미널에서 npm run format으로 정렬하고 npm run format:check로 확인한다. .prettierrc.json과 .editorconfig가 공통 규칙이다. .env, 비공개 데이터, 설치 패키지는 포맷 대상에서 제외한다.
+## 3. 화면은 나중에 연결해서 보기
 
-## 테스트 코드
+`client/src/main.jsx` → `App.jsx` → `pages/manager/ManagerPage.jsx` → 회원/강좌 컴포넌트 → `shared/api.js` 순서다. 실제 화면 입력은 MemberFields가 만들고, 항목 ON/OFF 값은 AuthProvider가 읽어 공유한다. 목록이나 상단의 회원 표시를 바꾸려면 [memberLabel.mjs](../client/src/shared/memberLabel.mjs)를 본다. 이 함수는 현재 켜 둔 닉네임·아이디·이메일 중 어떤 값을 보여 줄지 정한다.
 
-평가용 테스트는 Mocha로 작성한다. tests/api.test.js에서 일반 API 11개, tests/kakao.test.js에서 카카오 인증 7개를 확인한다. describe 안에 before → it → after 순서로 준비·검사·정리 코드를 읽으면 된다. npm test로 전체 실행한다.
+연습할 때는 서비스의 완료 문구 한 곳을 바꾸고 API 결과를 확인한 다음, 필드 검증과 Mocha 검사를 함께 읽는다. DB 속성을 바꾸는 작업은 모델과 마이그레이션을 함께 확인한다. 공유 DB 자료로 테스트 초기화를 하지 않는다.

@@ -1,5 +1,4 @@
 const crypto = require('node:crypto');
-const { fail } = require('../../shared/helpers');
 
 // 키는 서버의 .env에서만 읽는다. 브라우저에는 설정 여부만 알려준다.
 function kakaoConfig() {
@@ -32,11 +31,4 @@ function kakaoConfig() {
     };
 }
 
-function requireKakaoConfig() {
-    const config = kakaoConfig();
-    if (!config.configured)
-        fail(503, '카카오 개발자 앱 설정이 필요합니다. docs/kakao-setup.md를 확인하세요.');
-    return config;
-}
-
-module.exports = { kakaoConfig, requireKakaoConfig };
+module.exports = { kakaoConfig };

@@ -5,6 +5,7 @@
     "editor.formatOnSave": true,
     "files.exclude": {
         ".local": true,
-        "node_modules": true
+        "node_modules": true,
+        "dist": true
     }
 }

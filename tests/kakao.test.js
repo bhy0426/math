@@ -1,4 +1,4 @@
-const { describe, it, before, after } = require('mocha');
+const { describe, it, before, after, afterEach } = require('mocha');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 require('./database-env');
@@ -8,8 +8,8 @@ process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 process.env.UPLOAD_DIR = require('node:path').resolve('.local/kakao-test-uploads');
 process.env.KAKAO_REST_API_KEY = 'synthetic-test-client';
 process.env.KAKAO_CLIENT_SECRET = 'synthetic-test-secret';
-const { pool, query } = require('../src/database');
-const { initialize } = require('./seed');
+const { sequelize, User, Role, Course, Lecture, KakaoAccount } = require('../src/models');
+const { resetData } = require('./reset-data');
 const app = require('../src/app');
 const { client: httpClient } = require('./http-client');
 const { kakaoConfig } = require('../src/modules/auth/kakao.config');
@@ -20,6 +20,16 @@ const codes = new Map();
 
 function client() {
     return httpClient(() => base);
+}
+
+async function configureEmail(enabled) {
+    const response = await admin('PATCH', '/manager/member-fields', {
+        fields: ['username', 'nickname', 'email'].map((key) => ({
+            key,
+            enabled: key !== 'email' || enabled,
+        })),
+    });
+    assert.equal(response.status, 200);
 }
 
 async function passwordLogin(request, email) {
@@ -51,29 +61,7 @@ async function authorize(request, kakaoId, link = false) {
 
 describe('카카오 로그인 통합 테스트', function () {
     before(async () => {
-        assert.equal((await query('SELECT DATABASE() AS name'))[0].name, 'mathsite_test');
-        await initialize();
-        const connection = await pool.getConnection();
-        try {
-            await connection.query('SET FOREIGN_KEY_CHECKS = 0');
-            for (const table of [
-                'kakao_accounts',
-                'password_resets',
-                'lecture_access',
-                'questions',
-                'boards',
-                'lectures',
-                'courses',
-                'users',
-                'roles',
-            ]) {
-                await connection.query(`TRUNCATE TABLE ${table}`);
-            }
-        } finally {
-            await connection.query('SET FOREIGN_KEY_CHECKS = 1');
-            connection.release();
-        }
-        await initialize();
+        await resetData();
         server = app.listen(0, '127.0.0.1');
         await new Promise((resolve) => server.once('listening', resolve));
         base = `http://127.0.0.1:${server.address().port}`;
@@ -108,10 +96,19 @@ describe('카카오 로그인 통합 테스트', function () {
         };
         admin = client();
         adminId = (await passwordLogin(admin, 'admin@mathsite.local')).id;
-        studentId = (await query("SELECT id FROM users WHERE email = 'student@mathsite.local'"))[0]
-            .id;
-        courseId = (await query('SELECT id FROM courses ORDER BY id'))[0].id;
-        lectureId = (await query('SELECT id FROM lectures ORDER BY id'))[0].id;
+        studentId = (
+            await User.findAll({ where: { email: 'student@mathsite.local' }, raw: true })
+        )[0].id;
+        courseId = (
+            await Course.findAll({ attributes: ['id'], order: [['id', 'ASC']], raw: true })
+        )[0].id;
+        lectureId = (
+            await Lecture.findAll({ attributes: ['id'], order: [['id', 'ASC']], raw: true })
+        )[0].id;
+    });
+
+    afterEach(async () => {
+        await configureEmail(true);
     });
 
     after(async () => {
@@ -120,7 +117,7 @@ describe('카카오 로그인 통합 테스트', function () {
             server.closeAllConnections();
             await new Promise((resolve) => server.close(resolve));
         }
-        await pool.end();
+        await sequelize.close();
         const fs = require('node:fs/promises');
         const path = require('node:path');
         assert.equal(process.env.UPLOAD_DIR, path.resolve('.local/kakao-test-uploads'));
@@ -193,51 +190,51 @@ describe('카카오 로그인 통합 테스트', function () {
         assert.equal((await request('GET', '/auth/status')).json.loggedIn, false);
     });
 
-    it('최초 카카오 인증 → 이름·이메일 → 승인 대기, 이메일 자동 병합·권한 위조 금지', async () => {
+    it('이메일 OFF: 최초 카카오 인증 → 아이디·닉네임 → 승인 대기, 권한 위조 금지', async () => {
+        await configureEmail(false);
         const request = client();
         assert.equal(
             (
                 await request('POST', '/auth/kakao/register', {
-                    name: '불가',
-                    email: 'fake@mathsite.local',
+                    nickname: '불가',
+                    username: 'kakao_student',
                 })
             ).status,
             400,
         );
         const callback = await authorize(request, 100001);
-        assert.equal(callback.headers.get('location'), '/login?kakao=register');
+        assert.equal(callback.headers.get('location'), '/register?kakao=register');
         assert.equal((await request('GET', '/auth/kakao/status')).json.registrationRequired, true);
         assert.equal(
             (
                 await request('POST', '/auth/kakao/register', {
-                    name: '사칭',
-                    email: 'admin@mathsite.local',
+                    nickname: '사칭',
+                    username: 'admin',
                 })
             ).status,
             409,
         );
-        assert.equal((await query('SELECT COUNT(*) AS total FROM kakao_accounts'))[0].total, 0);
+        assert.equal((await KakaoAccount.count().then((total) => [{ total }]))[0].total, 0);
         const created = await request('POST', '/auth/kakao/register', {
-            name: '카카오 학생',
-            email: 'kakao@mathsite.local',
+            nickname: '카카오 학생',
+            username: 'kakao_student',
             role: 'admin',
             kakaoId: 'forged',
         });
         assert.equal(created.status, 201);
+        assert.equal((await User.findByPk(created.json.user.id)).email, null);
         assert.equal(created.json.user.status, 'pending');
         assert.equal((await request('GET', '/auth/status')).json.loggedIn, false);
         assert.equal(
             (await authorize(request, 100001)).headers.get('location'),
             '/login?kakao=approval',
         );
-        const [account] = await query(
-            'SELECT u.id, r.code FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ?',
-            [created.json.user.id],
-        );
+        const [account] = await User.findByPk(created.json.user.id, {
+            include: { model: Role, as: 'roleRecord' },
+        }).then((row) => [{ id: row.id, code: row.roleRecord.code }]);
         assert.equal(account.code, 'student');
         assert.equal(
-            (await query('SELECT kakao_id FROM kakao_accounts WHERE user_id = ?', [account.id]))[0]
-                .kakao_id,
+            (await KakaoAccount.findAll({ where: { user_id: account.id }, raw: true }))[0].kakao_id,
             '100001',
         );
         await admin('PATCH', `/manager/users/${account.id}/status`, { status: 'active' });
@@ -293,10 +290,7 @@ describe('카카오 로그인 통합 테스트', function () {
         process.env.KAKAO_REST_API_KEY = 'different-synthetic-app';
         try {
             const request = client();
-            assert.equal(
-                (await authorize(request, 200001)).headers.get('location'),
-                '/login?kakao=register',
-            );
+            assert.equal((await authorize(request, 200001)).headers.get('location'), '/register');
             assert.equal((await request('GET', '/auth/status')).json.loggedIn, false);
         } finally {
             process.env.KAKAO_REST_API_KEY = key;
@@ -315,27 +309,28 @@ describe('카카오 로그인 통합 테스트', function () {
     });
 
     it('Long 회원번호를 반올림하지 않고 저장하고 완료 callback 재사용을 차단', async () => {
+        await configureEmail(false);
         const request = client();
         const state = await start(request);
         const code = crypto.randomUUID();
         codes.set(code, { raw: '{"id":9007199254740993}' });
         const url = `/auth/kakao/callback?code=${code}&state=${state}`;
-        assert.equal((await request('GET', url)).headers.get('location'), '/login?kakao=register');
+        assert.equal(
+            (await request('GET', url)).headers.get('location'),
+            '/register?kakao=register',
+        );
         assert.equal(
             (
                 await request('POST', '/auth/kakao/register', {
-                    name: '큰 ID 학생',
-                    email: 'large-id@mathsite.local',
+                    nickname: '큰 ID 학생',
+                    username: 'kakao_large',
                 })
             ).status,
             201,
         );
         assert.equal(
-            (
-                await query('SELECT kakao_id FROM kakao_accounts WHERE kakao_id = ?', [
-                    '9007199254740993',
-                ])
-            )[0].kakao_id,
+            (await KakaoAccount.findAll({ where: { kakao_id: '9007199254740993' }, raw: true }))[0]
+                .kakao_id,
             '9007199254740993',
         );
         const calls = upstreamCalls;

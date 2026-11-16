@@ -10,8 +10,9 @@ process.env.TEST_PASSWORD = crypto.randomBytes(24).toString('hex');
 process.env.UPLOAD_DIR = path.resolve('.local/test-uploads');
 process.env.RESET_MAIL_DIR = path.resolve('.local/test-reset-mail');
 process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
-const { pool, query } = require('../src/database');
-const { initialize } = require('./seed');
+const { sequelize, Course, Lecture } = require('../src/models');
+const { resetData } = require('./reset-data');
+const { openMailbox, closeMailbox, registerByEmail } = require('./signup-mail');
 const app = require('../src/app');
 let server, base, admin, student, viewer, fixture;
 let adminId, studentId, viewerId, courseId, firstLecture, secondLecture;
@@ -29,30 +30,8 @@ async function login(request, address, password = process.env.TEST_PASSWORD) {
 
 describe('학원 사이트 API 통합 테스트', function () {
     before(async () => {
-        const [database] = await query('SELECT DATABASE() AS name');
-        assert.equal(database.name, 'mathsite_test');
-        await initialize();
-        const connection = await pool.getConnection();
-        try {
-            await connection.query('SET FOREIGN_KEY_CHECKS = 0');
-            for (const table of [
-                'kakao_accounts',
-                'password_resets',
-                'lecture_access',
-                'questions',
-                'boards',
-                'lectures',
-                'courses',
-                'users',
-                'roles',
-            ]) {
-                await connection.query(`TRUNCATE TABLE ${table}`);
-            }
-        } finally {
-            await connection.query('SET FOREIGN_KEY_CHECKS = 1');
-            connection.release();
-        }
-        await initialize();
+        await openMailbox();
+        await resetData();
         fixture = await fs.readFile(path.join(__dirname, 'fixtures/sample.mp4'));
         server = app.listen(0, '127.0.0.1');
         await new Promise((resolve) => server.once('listening', resolve));
@@ -63,18 +42,26 @@ describe('학원 사이트 API 통합 테스트', function () {
         adminId = (await login(admin, 'admin@mathsite.local')).id;
         studentId = (await login(student, 'student@mathsite.local')).id;
         viewerId = (await login(viewer, 'viewer@mathsite.local')).id;
-        [courseId] = (await query('SELECT id FROM courses ORDER BY id')).map((row) => row.id);
+        [courseId] = (
+            await Course.findAll({ attributes: ['id'], order: [['id', 'ASC']], raw: true })
+        ).map((row) => row.id);
         [firstLecture, secondLecture] = (
-            await query('SELECT id FROM lectures WHERE course_id = ? ORDER BY position', [courseId])
+            await Lecture.findAll({
+                where: { course_id: courseId },
+                order: [['position', 'ASC']],
+                raw: true,
+            })
         ).map((row) => row.id);
     });
 
     after(async () => {
+        await closeMailbox();
+        await require('../src/modules/courses/video').waitForConversions();
         if (server) {
             server.closeAllConnections();
             await new Promise((resolve) => server.close(resolve));
         }
-        await pool.end();
+        await sequelize.close();
         for (const directory of [process.env.UPLOAD_DIR, process.env.RESET_MAIL_DIR]) {
             const resolved = path.resolve(directory);
             assert.ok(
@@ -85,6 +72,22 @@ describe('학원 사이트 API 통합 테스트', function () {
             );
             await fs.rm(resolved, { recursive: true, force: true });
         }
+    });
+
+    it('React 화면의 직접 주소·새로고침과 빌드 자산 제공, API 404 분리', async () => {
+        for (const url of ['/', '/login', '/courses/1', '/courses/1/lectures/1', '/manager']) {
+            const response = await fetch(base + url);
+            assert.equal(response.status, 200, url);
+            assert.match(response.headers.get('content-type'), /text\/html/);
+            const html = await response.text();
+            assert.match(html, /<div id="root"><\/div>/);
+            const asset = html.match(/src="(\/assets\/[^\"]+\.js)"/)[1];
+            assert.equal((await fetch(base + asset)).status, 200);
+        }
+        const missing = await fetch(base + '/api/does-not-exist');
+        assert.equal(missing.status, 404);
+        assert.match(missing.headers.get('content-type'), /application\/json/);
+        assert.equal((await fetch(base + '/.env')).status, 404);
     });
 
     it('서버 상태, 비로그인 차단, 세션 로그인·로그아웃', async () => {
@@ -123,7 +126,7 @@ describe('학원 사이트 API 통합 테스트', function () {
         assert.equal(created.status, 201);
         const number = created.json.course.id;
         assert.equal(
-            (await query('SELECT title FROM courses WHERE id = ?', [number]))[0].title,
+            (await Course.findAll({ where: { id: number }, raw: true }))[0].title,
             '검증용 강좌',
         );
         assert.equal(
@@ -204,6 +207,7 @@ describe('학원 사이트 API 통합 테스트', function () {
             416,
         );
         assert.equal((await admin('PATCH', url, { title: '제목 변경' })).status, 200);
+        assert.equal((await admin('PATCH', url, { description: '' })).status, 200);
         const other = await admin('POST', '/courses', {
             title: '다른 강좌',
             description: '범위 확인',
@@ -215,7 +219,7 @@ describe('학원 사이트 API 통합 테스트', function () {
         await admin('DELETE', `/courses/${other.json.course.id}`);
         await admin('DELETE', `/manager/users/${studentId}/lectures/${lectureId}`);
         assert.equal((await student('GET', url)).status, 403);
-        const [stored] = await query('SELECT video_file FROM lectures WHERE id = ?', [lectureId]);
+        const [stored] = await Lecture.findAll({ where: { id: lectureId }, raw: true });
         assert.equal((await admin('DELETE', url)).status, 200);
         await assert.rejects(fs.stat(path.join(process.env.UPLOAD_DIR, stored.video_file)), {
             code: 'ENOENT',
@@ -258,7 +262,7 @@ describe('학원 사이트 API 통합 테스트', function () {
         assert.equal(
             (await admin('PATCH', `/boards/${boardId}/pin`, { isPinned: true })).json.board
                 .is_pinned,
-            1,
+            true,
         );
         assert.equal((await student('DELETE', `/boards/${boardId}`)).status, 403);
         assert.equal((await admin('DELETE', `/boards/${boardId}`)).status, 200);
@@ -307,8 +311,9 @@ describe('학원 사이트 API 통합 테스트', function () {
     it('회원가입은 승인 대기, 역할 위조 불가, 관리자 승인 후 로그인', async () => {
         const fresh = client();
         const password = crypto.randomBytes(16).toString('hex');
-        const registered = await fresh('POST', '/auth/register', {
-            name: '신규 학생',
+        const registered = await registerByEmail(fresh, {
+            nickname: '신규 학생',
+            username: 'new_student',
             email: 'new@mathsite.local',
             password,
             role: 'admin',
@@ -327,13 +332,14 @@ describe('학원 사이트 API 통합 테스트', function () {
         assert.equal((await login(fresh, 'new@mathsite.local', password)).role, 'student');
         assert.equal((await fresh('PATCH', '/user', { role: 'admin' })).status, 400);
         assert.equal(
-            (await fresh('PATCH', '/user', { name: '이름 변경' })).json.user.name,
-            '이름 변경',
+            (await fresh('PATCH', '/user', { nickname: '닉네임 변경' })).json.user.nickname,
+            '닉네임 변경',
         );
         assert.equal(
             (
-                await fresh('POST', '/auth/register', {
-                    name: '중복',
+                await client()('POST', '/auth/register/code', {
+                    nickname: '중복',
+                    username: 'duplicate_student',
                     email: 'new@mathsite.local',
                     password,
                 })
@@ -380,7 +386,8 @@ describe('학원 사이트 API 통합 테스트', function () {
     it('비밀번호 재설정 토큰 비노출·일회용, 변경 후 기존 세션 무효화', async () => {
         const request = client();
         await login(request, 'viewer@mathsite.local');
-        const response = await request('POST', '/auth/reset', { email: 'viewer@mathsite.local' });
+        const response = await admin('POST', `/manager/users/${viewerId}/password-reset`);
+        assert.equal((await request('GET', '/user')).status, 401);
         assert.equal(response.status, 200);
         assert.equal('token' in response.json, false);
         const files = await fs.readdir(process.env.RESET_MAIL_DIR);

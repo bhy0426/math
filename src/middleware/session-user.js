@@ -1,12 +1,10 @@
-const { query } = require('../database');
-const { userSelect, publicUser } = require('../shared/helpers');
+const { currentAccount } = require('../modules/auth/service');
 const { regenerateSession } = require('../modules/auth/session');
 
 async function currentUser(req, res, next) {
     if (req.session.userId) {
-        const [user] = await query(`${userSelect} WHERE u.id = ?`, [req.session.userId]);
-        if (user && user.status === 'active' && user.session_version === req.session.version)
-            req.user = publicUser(user);
+        const user = await currentAccount(req);
+        if (user) req.user = user;
         else {
             await regenerateSession(req);
             res.clearCookie('mathsite.sid');

@@ -1,45 +1,42 @@
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { pool, query } = require('../src/database');
-const { text, email, hashPassword } = require('../src/shared/helpers');
+const { sequelize, Role, User } = require('../src/models');
+const { text, email, username } = require('../src/shared/helpers');
+const { hashPassword } = require('../src/modules/auth/password');
+const { migrate } = require('../database/migrate');
 
 async function initialize() {
-    const schema = await fs.readFile(path.join(__dirname, '../database/schema.sql'), 'utf8');
-    for (const statement of schema
-        .split(';')
-        .map((value) => value.trim())
-        .filter(Boolean))
-        await pool.query(statement);
-    await query(
-        "INSERT IGNORE INTO roles (code, name, can_manage) VALUES ('admin', '관리자', TRUE), ('student', '학생', FALSE)",
-    );
+    const result = await migrate();
+    if (result.duplicateNicknames)
+        console.warn('테이블 준비 완료. 기존 중복 닉네임의 고유 제약만 적용을 보류했습니다.');
+    await Role.findOrCreate({
+        where: { code: 'admin' },
+        defaults: { name: '관리자', can_manage: true },
+    });
+    await Role.findOrCreate({
+        where: { code: 'student' },
+        defaults: { name: '학생', can_manage: false },
+    });
 }
 
 async function createInitialAdmin() {
-    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) return;
-    const [existing] = await query('SELECT COUNT(*) AS total FROM users');
-    if (existing.total) return;
-    const [role] = await query("SELECT id FROM roles WHERE code = 'admin'");
-    await query(
-        "INSERT INTO users (name, email, password_hash, role_id, status) VALUES (?, ?, ?, ?, 'active')",
-        [
-            text(process.env.ADMIN_NAME || '관리자', '이름', 80),
-            email(process.env.ADMIN_EMAIL),
-            await hashPassword(process.env.ADMIN_PASSWORD),
-            role.id,
-        ],
-    );
+    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD || (await User.count())) return;
+    const role = await Role.findOne({ where: { code: 'admin' } });
+    await User.create({
+        nickname: text(process.env.ADMIN_NICKNAME || '관리자', '닉네임', 80),
+        email: email(process.env.ADMIN_EMAIL),
+        username: process.env.ADMIN_USERNAME ? username(process.env.ADMIN_USERNAME) : null,
+        password_hash: await hashPassword(process.env.ADMIN_PASSWORD),
+        role_id: role.id,
+        status: 'active',
+    });
 }
 
 module.exports = { initialize };
-
-if (require.main === module) {
+if (require.main === module)
     initialize()
         .then(createInitialAdmin)
-        .then(() => console.log('DB 준비 완료: 기존 데이터 유지'))
+        .then(() => console.log('Sequelize 매핑 준비 완료: 기존 데이터 유지'))
         .catch((error) => {
-            console.error(error.code || error.message);
+            console.error(error.original?.code || error.message);
             process.exitCode = 1;
         })
-        .finally(() => pool.end());
-}
+        .finally(() => sequelize.close());
