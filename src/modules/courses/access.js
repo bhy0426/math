@@ -7,6 +7,20 @@ function accessWhere(userId) {
     return { user_id: userId, starts_at: { [Op.lte]: now }, expires_at: { [Op.gt]: now } };
 }
 
+function accessPeriod(body) {
+    const starts = body.startsAt ? new Date(body.startsAt) : new Date(Date.now() - 1000);
+    const expires = body.expiresAt
+        ? new Date(body.expiresAt)
+        : new Date(Date.now() + 30 * 86400000);
+    if (
+        !Number.isFinite(starts.getTime()) ||
+        !Number.isFinite(expires.getTime()) ||
+        expires <= starts
+    )
+        fail(400, '유효한 시작일과 만료일을 입력하세요.');
+    return { starts, expires };
+}
+
 async function getCourse(courseId, user) {
     const course = await Course.findByPk(id(courseId));
     if (!course) fail(404, '강좌가 없습니다.');
@@ -54,4 +68,4 @@ function publicLecture(lecture) {
     };
 }
 
-module.exports = { accessWhere, getCourse, getLecture, publicLecture };
+module.exports = { accessWhere, accessPeriod, getCourse, getLecture, publicLecture };

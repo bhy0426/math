@@ -10,6 +10,9 @@ router.use((req, res, next) => {
 
 router.get('/status', (req, res) => res.json(service.status(req.user)));
 router.get('/fields', async (req, res) => res.json(await fields.publicConfiguration()));
+router.post('/register/check', async (req, res) =>
+    res.json(await signup.checkAvailability(req.body)),
+);
 router.post('/register/code', async (req, res) =>
     res.json(await signup.requestCode(req, req.body)),
 );
@@ -22,10 +25,7 @@ router.post('/logout', async (req, res) => {
     res.clearCookie('mathsite.sid');
     res.json(result);
 });
-router.get('/reset/status', async (req, res) => {
-    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-    res.json(await service.recoveryStatus(req));
-});
+router.get('/reset/status', async (req, res) => res.json(await service.recoveryStatus(req)));
 router.post('/reset', async (req, res) => res.json(await service.reset(req.body, req)));
 
 module.exports = router;

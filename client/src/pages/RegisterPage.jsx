@@ -1,27 +1,28 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { api } from '../shared/api';
 import { useAction, useResource } from '../shared/hooks';
 import { Field, Form, Page } from '../shared/components';
-import MemberFields from '../shared/MemberFields';
+import MemberFields, { useRegistrationChecks } from '../shared/MemberFields';
 import { useAuth } from '../shared/auth';
 
 function EmailRegistration({ onRegistered }) {
     const { fieldsReady, canRequestResetEmail: mailReady } = useAuth();
     const [delivery, setDelivery] = useState(null);
+    const checks = useRegistrationChecks();
     const action = useAction();
 
     async function sendCode(profile, element) {
-        const result = await api('POST', '/auth/register/code', profile);
+        const result = await checks.post('/auth/register/code', profile);
         setDelivery({ profile, expiresIn: result.expiresIn, resendAfter: result.resendAfter });
         if (element.elements.code) element.elements.code.value = '';
     }
 
     async function submit(form, element) {
         const { password, confirmPassword, code, ...profile } = Object.fromEntries(form);
+        checks.requireChecks(profile);
         if (password !== confirmPassword) throw new Error('비밀번호가 일치하지 않습니다.');
         if (!delivery) return sendCode(profile, element);
-        const result = await api('POST', '/auth/register', { ...profile, password, code });
+        const result = await checks.post('/auth/register', { ...profile, password, code });
         onRegistered(result.message);
     }
 
@@ -36,7 +37,7 @@ function EmailRegistration({ onRegistered }) {
                 onSubmit={(form, element) => action.run(() => submit(form, element))}
             >
                 <div hidden={Boolean(delivery)}>
-                    <MemberFields />
+                    <MemberFields checks={checks} />
                     <Field
                         label="비밀번호 (8~128자)"
                         name="password"
@@ -106,6 +107,7 @@ function SocialRegistration({ onRegistered }) {
     ].filter(({ status }) => status?.configured);
     const pending = providers.find(({ status }) => status.registrationRequired);
     const action = useAction();
+    const checks = useRegistrationChecks();
 
     return (
         <>
@@ -115,17 +117,18 @@ function SocialRegistration({ onRegistered }) {
                     busy={action.busy || !fieldsReady}
                     onSubmit={(form) =>
                         action.run(async () => {
-                            const result = await api(
-                                'POST',
+                            const profile = Object.fromEntries(form);
+                            checks.requireChecks(profile);
+                            const result = await checks.post(
                                 '/auth/' + pending.key + '/register',
-                                Object.fromEntries(form),
+                                profile,
                             );
                             onRegistered(result.message);
                         })
                     }
                 >
                     <p>{pending.label} 계정 인증이 완료됐습니다. 가입 정보를 입력하세요.</p>
-                    <MemberFields />
+                    <MemberFields checks={checks} />
                     <button>가입 신청</button>
                     <a href={'/auth/' + pending.key}>다시 인증하기</a>
                 </Form>
@@ -146,10 +149,12 @@ function SocialRegistration({ onRegistered }) {
 }
 
 export default function RegisterPage() {
-    const { fields, loading, user } = useAuth();
+    const { fields, emailEnabled, loading, user } = useAuth();
     const [confirmation, setConfirmation] = useState('');
-    const emailEnabled = fields?.some((field) => field.key === 'email' && field.enabled);
-    const fieldKey = fields?.map((field) => field.key).join('/');
+    const fieldKey = fields
+        ?.filter((field) => field.enabled)
+        .map((field) => field.key)
+        .join('/');
     if (!loading && user) return <Navigate to="/user" replace />;
     return (
         <Page title="회원가입" message={confirmation}>

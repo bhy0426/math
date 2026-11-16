@@ -8,14 +8,28 @@ export default function BoardsPage() {
     const { user } = useAuth();
     const [selectedId, setSelectedId] = useState(null);
     const [draftKey, setDraftKey] = useState(0);
+    const boardPath = selectedId ? '/boards/' + selectedId : '/boards';
     const list = useResource('/boards');
-    const detail = useResource(selectedId ? '/boards/' + selectedId : null);
+    const detail = useResource(selectedId ? boardPath : null);
     const selected = detail.data?.board;
     const action = useAction();
     function reset() {
         setSelectedId(null);
         setDraftKey((value) => value + 1);
         list.reload();
+    }
+    function saveBoard(form) {
+        const method = selected ? 'PATCH' : 'POST';
+        const body = {
+            title: form.get('title'),
+            content: form.get('content'),
+            popupEnabled: form.has('popupEnabled'),
+            isPinned: form.has('isPinned'),
+        };
+        return action.run(() => api(method, boardPath, body), reset);
+    }
+    function deleteBoard() {
+        return action.run(() => api('DELETE', boardPath), reset);
     }
     return (
         <Page title="공지사항" message={action.message || list.error || detail.error}>
@@ -38,21 +52,7 @@ export default function BoardsPage() {
                     <Form
                         key={selectedId || `new-${draftKey}`}
                         busy={action.busy}
-                        onSubmit={(form) =>
-                            action.run(async () => {
-                                const result = await api(
-                                    selected ? 'PATCH' : 'POST',
-                                    '/boards' + (selected ? '/' + selected.id : ''),
-                                    {
-                                        ...Object.fromEntries(form),
-                                        popupEnabled: form.has('popupEnabled'),
-                                        isPinned: form.has('isPinned'),
-                                    },
-                                );
-                                reset();
-                                return result;
-                            })
-                        }
+                        onSubmit={saveBoard}
                     >
                         <Field
                             label="제목"
@@ -84,21 +84,7 @@ export default function BoardsPage() {
                         <button type="button" onClick={reset}>
                             새 공지
                         </button>
-                        {selected && (
-                            <DeleteButton
-                                key={selected.id}
-                                onDelete={() =>
-                                    action.run(async () => {
-                                        const result = await api(
-                                            'DELETE',
-                                            '/boards/' + selected.id,
-                                        );
-                                        reset();
-                                        return result;
-                                    })
-                                }
-                            />
-                        )}
+                        {selected && <DeleteButton key={selected.id} onDelete={deleteBoard} />}
                     </Form>
                 </section>
             )}

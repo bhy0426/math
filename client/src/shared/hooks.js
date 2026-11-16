@@ -43,11 +43,12 @@ export function useResource(url, scope = '') {
 export function useAction() {
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
-    async function run(action) {
+    async function run(action, onSuccess) {
         setBusy(true);
         setMessage('');
         try {
             const result = await action();
+            if (onSuccess) await onSuccess();
             setMessage(result?.message || '');
             return result;
         } catch (error) {

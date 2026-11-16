@@ -9,6 +9,16 @@ const hlsRoot = path.resolve(process.env.HLS_DIR || path.join(uploadDir, 'hls'))
 let queue = Promise.resolve();
 const jobs = new Map();
 
+async function storedFile(filename) {
+    try {
+        const info = await fs.stat(filename);
+        return info.isFile() ? info : null;
+    } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+        throw error;
+    }
+}
+
 function hlsPath(key, asset = '') {
     if (
         !/^[a-f0-9-]{36}$/.test(key || '') ||
@@ -104,6 +114,7 @@ async function convert(lectureId, filename, job) {
         await removeHls(current.hls_key);
     } catch {
         await removeHls(key);
+        if (job.cancelled) return;
         await Lecture.update(
             { video_status: 'FAILED' },
             { where: { id: lectureId, video_file: filename } },
@@ -141,12 +152,17 @@ async function cancelConversion(lectureId) {
 
 async function resumeConversions() {
     const rows = await Lecture.findAll({ where: { video_status: 'PROCESSING' } });
-    for (const row of rows) await queueConversion(row.id, row.video_file);
+    for (const row of rows) {
+        // 공유 DB에는 다른 PC의 작업도 있다. 이 서버에서 원본을 읽을 수 있을 때만 복구한다.
+        if (row.video_file && (await storedFile(videoPath(row.video_file))))
+            await queueConversion(row.id, row.video_file);
+    }
 }
 
 module.exports = {
     hlsRoot,
     hlsPath,
+    storedFile,
     removeHls,
     queueConversion,
     cancelConversion,

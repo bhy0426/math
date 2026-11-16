@@ -4,7 +4,7 @@ const { Lecture, LectureAccess } = require('../../models');
 const { text, bool, id, fail, removeVideo, videoPath } = require('../../shared/helpers');
 const { getCourse, getLecture, publicLecture, accessWhere } = require('./access');
 const { checkVideo } = require('./upload');
-const { cancelConversion, queueConversion, hlsPath, removeHls } = require('./video');
+const { cancelConversion, queueConversion, hlsPath, removeHls, storedFile } = require('./video');
 
 async function list(courseId, query, user) {
     const course = await getCourse(courseId, user);
@@ -70,7 +70,6 @@ async function edit(courseId, lectureId, body, file, user) {
         if (body.position !== undefined) values.position = id(body.position);
         if (body.isPublished !== undefined) values.is_published = bool(body.isPublished);
         if (file) {
-            await cancelConversion(lecture.id);
             Object.assign(values, {
                 video_file: file.filename,
                 mime_type: await checkVideo(file),
@@ -81,9 +80,10 @@ async function edit(courseId, lectureId, body, file, user) {
         await lecture.update(values);
         saved = true;
         if (file) {
+            // 새 파일 검증·DB 저장 후에만 기존 변환을 취소하고 새 변환을 시작한다.
+            await queueConversion(lecture.id, file.filename);
             await removeHls(previousHls);
             await removeVideo(previousFile);
-            await queueConversion(lecture.id, file.filename);
         }
         return {
             message: '강의 수정 완료',
@@ -107,7 +107,12 @@ async function remove(courseId, lectureId, user) {
 async function playback(courseId, lectureId, user) {
     const lecture = await getLecture(courseId, lectureId, user);
     if (!lecture.video_file) fail(409, '등록된 영상이 없습니다.');
-    const hls = Boolean(lecture.hls_key && lecture.video_status === 'READY');
+    const hls =
+        lecture.hls_key &&
+        lecture.video_status === 'READY' &&
+        (await storedFile(hlsPath(lecture.hls_key, 'index.m3u8')));
+    if (!hls && !(await storedFile(videoPath(lecture.video_file))))
+        fail(404, '이 서버의 영상 저장소에 파일이 없습니다.');
     return {
         lecture: publicLecture(lecture),
         format: hls ? 'hls' : 'original',
@@ -120,6 +125,8 @@ async function playback(courseId, lectureId, user) {
 async function convert(courseId, lectureId, user) {
     const lecture = await getLecture(courseId, lectureId, user);
     if (!lecture.video_file) fail(409, '등록된 영상이 없습니다.');
+    if (!(await storedFile(videoPath(lecture.video_file))))
+        fail(404, '이 서버의 영상 저장소에 원본이 없습니다.');
     if (lecture.video_status === 'PROCESSING') fail(409, '변환 중입니다.');
     await queueConversion(lecture.id, lecture.video_file);
     return { message: '영상 변환을 시작했습니다.' };
@@ -129,8 +136,10 @@ async function hlsFile(courseId, lectureId, key, asset, user) {
     const lecture = await getLecture(courseId, lectureId, user);
     if (lecture.hls_key !== key || lecture.video_status !== 'READY')
         fail(404, '재생 가능한 영상이 아닙니다.');
+    const filename = hlsPath(key, asset);
+    if (!(await storedFile(filename))) fail(404, '이 서버의 영상 저장소에 파일이 없습니다.');
     return {
-        filename: hlsPath(key, asset),
+        filename,
         contentType: asset.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t',
         redirect: `/_protected_media/${key}/${asset}`,
     };
@@ -141,12 +150,9 @@ async function original(courseId, lectureId, info, range, user) {
     if (info === '1') return { json: { lecture: publicLecture(lecture) } };
     if (!lecture.video_file) fail(409, '등록된 영상이 없습니다.');
     const filename = videoPath(lecture.video_file);
-    let size;
-    try {
-        size = (await fs.promises.stat(filename)).size;
-    } catch {
-        fail(404, '영상 파일이 없습니다.');
-    }
+    const file = await storedFile(filename);
+    if (!file) fail(404, '이 서버의 영상 저장소에 원본이 없습니다.');
+    const size = file.size;
     let start = 0,
         end = size - 1;
     if (range) {

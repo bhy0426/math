@@ -60,6 +60,25 @@ const MemberField = define('member_fields', {
     key: { type: DataTypes.STRING(20), primaryKey: true },
     enabled: { ...required(DataTypes.BOOLEAN), defaultValue: true },
 });
+const Group = define('student_groups', {
+    id: primaryId(),
+    name: { ...required(DataTypes.STRING(80)), unique: true },
+});
+const GroupMember = define('group_members', {
+    group_id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true },
+    user_id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true },
+});
+const Broadcast = define('mail_broadcasts', {
+    request_id: { type: DataTypes.CHAR(36), primaryKey: true },
+    admin_id: required(DataTypes.INTEGER.UNSIGNED),
+    input_hash: required(DataTypes.CHAR(64)),
+});
+const BroadcastDelivery = define('mail_broadcast_deliveries', {
+    request_id: { type: DataTypes.CHAR(36), primaryKey: true },
+    user_id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true },
+    status: { ...required(DataTypes.STRING(12)), defaultValue: 'pending' },
+    updated_at: createdAt(),
+});
 const Course = define('courses', {
     id: primaryId(),
     title: required(DataTypes.STRING(160)),
@@ -130,6 +149,15 @@ User.belongsTo(Role, { as: 'roleRecord', foreignKey: 'role_id', onDelete: 'RESTR
 Role.hasMany(User, { as: 'users', foreignKey: 'role_id', onDelete: 'RESTRICT' });
 KakaoAccount.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
 GoogleAccount.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
+Group.hasMany(GroupMember, { as: 'memberships', foreignKey: 'group_id', onDelete: 'CASCADE' });
+GroupMember.belongsTo(Group, { as: 'group', foreignKey: 'group_id', onDelete: 'CASCADE' });
+GroupMember.belongsTo(User, { as: 'student', foreignKey: 'user_id', onDelete: 'CASCADE' });
+User.hasMany(GroupMember, { as: 'memberships', foreignKey: 'user_id', onDelete: 'CASCADE' });
+BroadcastDelivery.belongsTo(Broadcast, {
+    as: 'broadcast',
+    foreignKey: 'request_id',
+    onDelete: 'CASCADE',
+});
 Lecture.belongsTo(Course, { as: 'course', foreignKey: 'course_id', onDelete: 'CASCADE' });
 Course.hasMany(Lecture, { as: 'lectures', foreignKey: 'course_id', onDelete: 'CASCADE' });
 LectureAccess.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -148,6 +176,10 @@ module.exports = {
     KakaoAccount,
     GoogleAccount,
     MemberField,
+    Group,
+    GroupMember,
+    Broadcast,
+    BroadcastDelivery,
     Course,
     Lecture,
     LectureAccess,

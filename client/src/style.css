@@ -12,6 +12,10 @@ nav {
     border-bottom: 1px solid #ccc;
     padding-bottom: 12px;
 }
+nav a[aria-current='page'] {
+    font-weight: bold;
+    text-decoration-thickness: 2px;
+}
 label {
     display: block;
     margin: 8px 0;

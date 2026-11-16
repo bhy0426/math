@@ -6,7 +6,7 @@ const { findUser, publicUser } = require('./account');
 const { hashPassword, verifyPassword, needsRehash } = require('./password');
 const { loginSession, regenerateSession } = require('./session');
 const { requireMail, sendReset } = require('./mail');
-const { listFields } = require('../manager/member-fields.service');
+const { listFields, requireEmailFields } = require('../manager/member-fields.service');
 
 function status(user) {
     return { loggedIn: Boolean(user), user: user || null };
@@ -52,13 +52,8 @@ async function logout(req) {
     return { message: '로그아웃 완료' };
 }
 
-async function requireEmailReset() {
-    if (!(await listFields()).some((field) => field.key === 'email' && field.enabled))
-        fail(404, '등록되지 않은 API입니다.');
-}
-
 async function requestAdminReset(userId) {
-    await requireEmailReset();
+    await requireEmailFields();
     requireMail();
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -126,7 +121,7 @@ async function reset(body, req) {
         await regenerateSession(req);
         return { message: '비밀번호 변경 완료. 다시 로그인하세요.' };
     }
-    await requireEmailReset();
+    await requireEmailFields();
     const token = text(body.token, '메일의 재설정 토큰', 128);
     const passwordHash = await hashPassword(body.password);
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');

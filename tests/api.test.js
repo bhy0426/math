@@ -350,6 +350,52 @@ describe('학원 사이트 API 통합 테스트', function () {
         assert.equal((await fresh('GET', '/user')).status, 401);
     });
 
+    it('같은 회원 상태·역할을 다시 저장해도 학생 로그인은 유지된다', async () => {
+        const profile = (await viewer('GET', '/user')).json.user;
+        assert.equal(
+            (await admin('PATCH', `/manager/users/${viewerId}/status`, { status: profile.status }))
+                .status,
+            200,
+        );
+        assert.equal(
+            (await admin('PATCH', `/manager/users/${viewerId}/role`, { roleId: profile.roleId }))
+                .status,
+            200,
+        );
+        assert.equal((await viewer('GET', '/user')).status, 200);
+    });
+
+    it('개별 시청 권한도 활성 학생에게만 부여하고 정지 상태에서 기존 권한을 회수할 수 있다', async () => {
+        const item = await Lecture.create({
+            course_id: courseId,
+            title: '개별 시청 권한 검사',
+            description: '',
+        });
+        const body = { lectureId: item.id };
+        const access = `/manager/users/${viewerId}/lectures`;
+        const status = `/manager/users/${viewerId}/status`;
+        try {
+            assert.equal(
+                (await admin('POST', `/manager/users/${adminId}/lectures`, body)).status,
+                409,
+            );
+            await admin('PATCH', status, { status: 'pending' });
+            assert.equal((await admin('POST', access, body)).status, 409);
+            assert.ok(
+                !(await admin('GET', access)).json.access.some((row) => row.lecture_id === item.id),
+            );
+            await admin('PATCH', status, { status: 'active' });
+            assert.equal((await admin('POST', access, body)).status, 201);
+            await admin('PATCH', status, { status: 'suspended' });
+            assert.equal((await admin('POST', access, body)).status, 409);
+            assert.equal((await admin('DELETE', access + '/' + item.id)).status, 200);
+        } finally {
+            await admin('PATCH', status, { status: 'active' });
+            await login(viewer, 'viewer@mathsite.local');
+            await item.destroy();
+        }
+    });
+
     it('정지·역할 변경은 기존 세션에도 반영, 마지막 관리자 보호', async () => {
         await admin('PATCH', `/manager/users/${viewerId}/status`, { status: 'suspended' });
         assert.equal((await viewer('GET', '/user')).status, 401);

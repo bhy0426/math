@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../shared/api';
-import { Page } from '../shared/components';
-import VideoPlayer from '../shared/VideoPlayer';
+import { api } from '../../shared/api';
+import { useAuth } from '../../shared/auth';
+import { Page } from '../../shared/components';
+import VideoPlayer from './VideoPlayer';
 
 export default function LecturePage() {
     const { courseId, lectureId } = useParams();
+    const { user } = useAuth();
     const [result, setResult] = useState(null);
     const [error, setError] = useState('');
     useEffect(() => {
@@ -19,7 +21,7 @@ export default function LecturePage() {
         return () => {
             active = false;
         };
-    }, [courseId, lectureId]);
+    }, [courseId, lectureId, user.id, user.canManage]);
     return (
         <Page title="강의 시청" message={error}>
             <Link to={`/courses/${courseId}`}>강좌로 돌아가기</Link>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { api } from '../shared/api';
 import { useAction, useResource } from '../shared/hooks';
 import { Field, Form, Page } from '../shared/components';
@@ -7,8 +7,7 @@ import { useAuth } from '../shared/auth';
 
 export default function ResetPage() {
     const [params, setParams] = useSearchParams();
-    const { fields, fieldsReady, canRequestResetEmail } = useAuth();
-    const emailEnabled = fields?.some((field) => field.key === 'email' && field.enabled);
+    const { emailEnabled, fieldsReady, canRequestResetEmail } = useAuth();
     const token = emailEnabled ? params.get('token') : null;
     const recovery = useResource('/auth/reset/status');
     const kakao = useResource('/auth/kakao/status');
@@ -20,6 +19,11 @@ export default function ResetPage() {
         cancelled: '본인 인증을 취소했습니다.',
         unlinked: '미리 연결된 활성 회원 계정을 찾을 수 없습니다. 관리자에게 문의하세요.',
     };
+    if (fieldsReady && !emailEnabled && params.has('token')) {
+        const remaining = new URLSearchParams(params);
+        remaining.delete('token');
+        return <Navigate to={{ pathname: '/reset', search: remaining.toString() }} replace />;
+    }
     return (
         <Page title="비밀번호 찾기" message={action.message || recovery.error || messages[result]}>
             {fieldsReady && !token && !recovery.data?.verified && !done && (

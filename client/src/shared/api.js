@@ -10,6 +10,7 @@ export async function api(method, path, body) {
     const data = await response.json();
     if (!response.ok) {
         const error = new Error(data.message || '요청에 실패했습니다.');
+        error.status = response.status;
         if (method === 'GET' && response.status === 503) {
             const seconds = Number(response.headers?.get('Retry-After'));
             if (Number.isInteger(seconds) && seconds > 0) error.retryAfterMs = seconds * 1000;

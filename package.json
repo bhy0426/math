@@ -15,13 +15,17 @@
         "media:start": "node scripts/nginx.js start",
         "media:stop": "node scripts/nginx.js stop",
         "media:check": "node scripts/nginx.js check",
-        "test": "npm run test:api && npm run test:kakao && npm run test:features && npm run test:social",
+        "test": "npm run test:api && npm run test:kakao && npm run test:features && npm run test:social && npm run test:registration && npm run test:mail && npm run test:groups && npm run test:broadcast",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "test:api": "mocha --timeout 15000 tests/api.test.js",
         "test:kakao": "mocha --timeout 15000 tests/kakao.test.js",
         "test:features": "mocha --timeout 60000 tests/features.test.js",
         "test:social": "mocha --timeout 15000 tests/social.test.js",
+        "test:registration": "mocha --timeout 15000 tests/registration-checks.test.js",
+        "test:mail": "mocha --timeout 15000 tests/manager-mail.test.js",
+        "test:groups": "mocha --timeout 15000 tests/groups.test.js",
+        "test:broadcast": "mocha --timeout 15000 tests/broadcast.test.js",
         "pretest": "npm run build"
     },
     "dependencies": {

@@ -426,6 +426,37 @@ describe('구글·카카오 복구와 회원 항목 설정', () => {
         );
     });
 
+    it('마지막 관리자의 로그인 방법을 보존하며 현재 앱에 소셜 연결이 있으면 전환할 수 있다', async () => {
+        const owner = await User.findOne({ where: { username: 'admin' } });
+        await owner.update({ username: null });
+        try {
+            assert.equal((await configure(['username'])).status, 409);
+            assert.equal(
+                (
+                    await login(
+                        client(() => base),
+                        owner.email,
+                    )
+                ).status,
+                200,
+            );
+            assert.equal(
+                (await authorize(admin, 'google', 'owner-switch-test', 'link')).status,
+                303,
+            );
+            assert.equal((await configure(['username'])).status, 200);
+            const returning = client(() => base);
+            assert.equal((await authorize(returning, 'google', 'owner-switch-test')).status, 303);
+            assert.equal((await returning('GET', '/user')).json.user.canManage, true);
+        } finally {
+            await owner.update({ username: 'admin' });
+            await GoogleAccount.destroy({
+                where: { user_id: owner.id, google_id: 'owner-switch-test' },
+            });
+            await configure(['username', 'nickname', 'email']);
+        }
+    });
+
     it('회원 항목 조회 중 DB 연결 한도 초과는 재시도 가능한 503으로 안내한다', async () => {
         const findAll = MemberField.findAll;
         MemberField.findAll = async () => {
@@ -486,6 +517,61 @@ describe('구글·카카오 복구와 회원 항목 설정', () => {
             })),
             before,
         );
+    });
+
+    it('허용된 여섯 설정 조합에서 내 정보·회원 명단·중복 확인·메일 수신자에 같은 항목을 사용한다', async () => {
+        const keys = ['username', 'nickname', 'email'];
+        const configurations = [
+            ['username'],
+            ['email'],
+            ['username', 'nickname'],
+            ['nickname', 'email'],
+            ['username', 'email'],
+            keys,
+        ];
+        const probe = {
+            username: 'unused_field_probe',
+            nickname: '설정 점검 미사용 닉네임',
+            email: 'unused-field-probe@example.com',
+        };
+        try {
+            for (const enabled of configurations) {
+                assert.equal((await configure(enabled)).status, 200);
+                const config = await admin('GET', '/auth/fields');
+                assert.deepEqual(
+                    config.json.fields.map((field) => field.key),
+                    enabled,
+                );
+                const status = await admin('GET', '/auth/status');
+                const profile = await admin('GET', '/user');
+                const members = await admin('GET', '/manager/users');
+                const detail = await admin('GET', '/manager/users/' + studentId);
+                const recipients = await admin('GET', '/manager/broadcasts/recipients');
+                assert.equal(recipients.status, enabled.includes('email') ? 200 : 404);
+                const rows = [
+                    status.json.user,
+                    profile.json.user,
+                    detail.json.user,
+                    ...members.json.users,
+                    ...(recipients.json.users || []),
+                ];
+                for (const row of rows) {
+                    assert.deepEqual(
+                        keys.filter((key) => Object.hasOwn(row, key)),
+                        enabled,
+                    );
+                }
+                for (const field of keys) {
+                    const result = await admin('POST', '/auth/register/check', {
+                        field,
+                        value: probe[field],
+                    });
+                    assert.equal(result.status, enabled.includes(field) ? 200 : 404);
+                }
+            }
+        } finally {
+            await configure(keys);
+        }
     });
 
     it('회원 표시에는 현재 켜 둔 닉네임·아이디·이메일 값을 순서대로 쓴다', async () => {
@@ -564,16 +650,13 @@ describe('구글·카카오 복구와 회원 항목 설정', () => {
         }
         const before = (await User.findByPk(viewerId)).password_hash;
         const transport = process.env.MAIL_TRANSPORT;
-        const host = process.env.SMTP_HOST;
         try {
             process.env.MAIL_TRANSPORT = 'smtp';
-            delete process.env.SMTP_HOST;
             const reset = await admin('POST', `/manager/users/${viewerId}/password-reset`);
             assert.equal(reset.status, 404);
             assert.doesNotMatch(reset.json.message, /이메일|메일|SMTP|사용하지 않|비활성/);
         } finally {
             process.env.MAIL_TRANSPORT = transport;
-            if (host !== undefined) process.env.SMTP_HOST = host;
         }
         assert.equal((await User.findByPk(viewerId)).password_hash, before);
         const social = client(() => base);

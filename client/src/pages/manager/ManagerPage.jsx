@@ -1,89 +1,45 @@
-import { useEffect, useState } from 'react';
-import { useResource } from '../../shared/hooks';
-import { Field, Page } from '../../shared/components';
-import MemberManager from './MemberManager';
-import CourseManager from './CourseManager';
-import LectureManager from './LectureManager';
-import RoleManager from './RoleManager';
-import MemberSettings from './MemberSettings';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../shared/auth';
+import { Page } from '../../shared/components';
+import MailSettings from './MailSettings';
+import MailCompose from './MailCompose';
+import GroupManager from './GroupManager';
+import MemberManager from './MemberManager';
+import MemberSettings from './MemberSettings';
+
+const tabs = [
+    { id: 'members', label: '회원 관리' },
+    { id: 'groups', label: '회원 그룹' },
+    { id: 'signup', label: '가입·로그인 설정' },
+    { id: 'mail', label: '메일 관리', requiresEmail: true },
+    { id: 'broadcasts', label: '메일 발송', requiresEmail: true },
+];
 
 export default function ManagerPage() {
-    const [tab, setTab] = useState('members');
-    const { fields } = useAuth();
-    const members = useResource('/manager/users', fields?.map((field) => field.key).join(','));
-    const roles = useResource('/manager');
-    const courses = useResource('/courses');
-    const [selectedId, setSelectedId] = useState('');
-    const rows = courses.data?.courses || [];
-    const course = rows.find((row) => String(row.id) === String(selectedId)) || rows[0];
-    const lectures = useResource(course ? `/courses/${course.id}/lectures` : null);
-    const processing =
-        !lectures.error &&
-        lectures.data?.lectures.some((item) => item.videoStatus === 'PROCESSING');
-    useEffect(() => {
-        if (!processing) return;
-        const timer = setInterval(lectures.reload, 3000);
-        return () => clearInterval(timer);
-    }, [processing, lectures.reload]);
+    const [params] = useSearchParams();
+    const { emailEnabled, fieldsReady } = useAuth();
+    const visibleTabs = tabs.filter((tab) => !tab.requiresEmail || emailEnabled);
+    const tabId = params.get('tab') || 'members';
+    const active = visibleTabs.find((tab) => tab.id === tabId);
+    if (!active && fieldsReady) return <Navigate to="/manager?tab=members" replace />;
     return (
-        <Page title="관리자" message={members.error || courses.error || lectures.error}>
-            <nav aria-label="관리자 기능">
-                <button aria-pressed={tab === 'members'} onClick={() => setTab('members')}>
-                    회원 탭
-                </button>
-                <button aria-pressed={tab === 'courses'} onClick={() => setTab('courses')}>
-                    강좌 탭
-                </button>
-            </nav>
-            {tab === 'members' && (
-                <>
-                    <MemberSettings />
-                    <Field
-                        label="시청 권한 관리 대상 강좌"
-                        as="select"
-                        value={course?.id || ''}
-                        onChange={(event) => setSelectedId(event.target.value)}
+        <Page title="학원 관리">
+            <nav aria-label="학원 관리 기능">
+                {visibleTabs.map((tab) => (
+                    <Link
+                        key={tab.id}
+                        to={'/manager?tab=' + tab.id}
+                        aria-current={tab.id === active?.id ? 'page' : undefined}
                     >
-                        {rows.map((row) => (
-                            <option key={row.id} value={row.id}>
-                                {row.title}
-                            </option>
-                        ))}
-                    </Field>
-                    <MemberManager
-                        users={members.data?.users || []}
-                        roles={roles.data?.roles || []}
-                        lectures={lectures.data?.lectures || []}
-                        onChange={members.reload}
-                    />
-                    <RoleManager
-                        roles={roles.data?.roles || []}
-                        onChange={() => {
-                            roles.reload();
-                            members.reload();
-                        }}
-                    />
-                </>
-            )}
-            {tab === 'courses' && (
-                <>
-                    <CourseManager
-                        courses={rows}
-                        course={course}
-                        onSelect={setSelectedId}
-                        onChange={courses.reload}
-                    />
-                    {course && (
-                        <LectureManager
-                            key={course.id}
-                            course={course}
-                            lectures={lectures.data?.lectures || []}
-                            onChange={lectures.reload}
-                        />
-                    )}
-                </>
-            )}
+                        {tab.label}
+                    </Link>
+                ))}
+            </nav>
+            {active?.id === 'members' && <MemberManager />}
+            {active?.id === 'groups' && <GroupManager />}
+            {active?.id === 'signup' && <MemberSettings />}
+            {active?.id === 'mail' && <MailSettings />}
+            {active?.id === 'broadcasts' && <MailCompose />}
         </Page>
     );
 }

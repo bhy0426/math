@@ -24,11 +24,23 @@ const {
 const { resetData } = require('./reset-data');
 const { openMailbox, closeMailbox, registerByEmail, requestCode } = require('./signup-mail');
 const { migrate } = require('../database/migrate');
-const { waitForConversions } = require('../src/modules/courses/video');
+const { hlsRoot, resumeConversions, waitForConversions } = require('../src/modules/courses/video');
+const { writeSender } = require('../src/modules/manager/mail-sender.store');
 const { client } = require('./http-client');
 const app = require('../src/app');
 let server, base, admin, student, viewer, courseId, studentId, lectureId, mediaUrl;
 let nginxRunning = false;
+
+function useTestSender() {
+    process.env.MAIL_TRANSPORT = 'smtp';
+    process.env.MAIL_SETTINGS_FILE = path.join(process.env.SIGNUP_MAIL_DIR, 'sender.json');
+    process.env.APP_URL = 'https://mathsite.invalid';
+    writeSender({
+        email: 'academy.example@gmail.com',
+        appPassword: 'abcdabcdabcdabcd',
+        verifiedAt: new Date().toISOString(),
+    });
+}
 
 async function login(request, email) {
     const response = await request('POST', '/auth/login', {
@@ -281,14 +293,9 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
     it('인증 메일을 보낼 수 없으면 가입이나 코드 발급이 완료되지 않는다', async () => {
         const request = client(() => base);
         const email = 'unsent-signup@example.test';
-        const { MAIL_TRANSPORT, SMTP_HOST, MAIL_FROM, SMTP_USER } = process.env;
+        const mode = process.env.MAIL_TRANSPORT;
         try {
-            Object.assign(process.env, {
-                MAIL_TRANSPORT: 'smtp',
-                SMTP_HOST: 'smtp.gmail.com',
-                SMTP_USER: 'test-sender@example.test',
-                MAIL_FROM: 'test-sender@example.test',
-            });
+            process.env.MAIL_TRANSPORT = 'smtp';
             const result = await request('POST', '/auth/register/code', {
                 email,
                 username: 'unsent_signup',
@@ -299,7 +306,7 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
             assert.equal(await User.count({ where: { email } }), 0);
             assert.equal(await SignupCode.count({ where: { email } }), 0);
         } finally {
-            Object.assign(process.env, { MAIL_TRANSPORT, SMTP_HOST, MAIL_FROM, SMTP_USER });
+            process.env.MAIL_TRANSPORT = mode;
         }
     });
 
@@ -368,7 +375,6 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
         const before = target.password_hash;
         const oldMode = process.env.MAIL_TRANSPORT;
         process.env.MAIL_TRANSPORT = 'smtp';
-        delete process.env.SMTP_HOST;
         assert.equal((await admin('GET', '/auth/fields')).json.canRequestResetEmail, false);
         assert.equal(
             (await admin('POST', `/manager/users/${target.id}/password-reset`)).status,
@@ -439,19 +445,14 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
             };
         };
         try {
-            Object.assign(process.env, {
-                MAIL_TRANSPORT: 'smtp',
-                SMTP_HOST: 'smtp.invalid',
-                SMTP_PORT: '587',
-                SMTP_SECURE: 'false',
-                MAIL_FROM: 'sender@mathsite.local',
-                APP_URL: 'https://mathsite.invalid',
-            });
+            useTestSender();
             await require('../src/modules/auth/mail').sendReset(
                 'student@mathsite.local',
                 'synthetic-reset-token',
             );
             assert.equal(options.requireTLS, true);
+            assert.equal(options.auth.user, 'academy.example@gmail.com');
+            assert.equal(sent.from, options.auth.user);
             assert.equal(sent.to, 'student@mathsite.local');
             assert.ok(
                 sent.text.includes('https://mathsite.invalid/reset?token=synthetic-reset-token'),
@@ -581,12 +582,7 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
             close() {},
         });
         try {
-            Object.assign(process.env, {
-                MAIL_TRANSPORT: 'smtp',
-                SMTP_HOST: 'smtp.invalid',
-                MAIL_FROM: 'sender@mathsite.local',
-                APP_URL: 'https://mathsite.invalid',
-            });
+            useTestSender();
             assert.equal(
                 (await admin('POST', `/manager/users/${studentId}/password-reset`)).status,
                 502,
@@ -616,26 +612,41 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
         }
     });
 
-    it('라우터는 요청·응답과 서비스 호출만 담당하고 직접 DB 호출하지 않음', async () => {
+    it('서버·마이그레이션·스크립트는 ORM을 사용하고 API 라우터는 DB를 직접 호출하지 않음', async () => {
         const { parsers } = require('prettier/plugins/babel');
-        async function files(directory) {
-            const list = await fs.readdir(directory, { withFileTypes: true });
-            const rows = [];
-            for (const item of list) {
-                const target = path.join(directory, item.name);
-                if (item.isDirectory()) rows.push(...(await files(target)));
-                else if (target.endsWith('.js')) rows.push(target);
-            }
-            return rows;
+        const sourceFiles = [];
+        for (const directory of ['src', 'database', 'scripts']) {
+            const names = await fs.readdir(directory, { recursive: true });
+            sourceFiles.push(
+                ...names
+                    .filter((name) => name.endsWith('.js'))
+                    .map((name) => path.join(directory, name)),
+            );
         }
-        for (const file of await files(path.resolve('src/modules'))) {
+        for (const file of sourceFiles) {
             const source = await fs.readFile(file, 'utf8');
             const ast = await parsers.babel.parse(source);
             function inspect(node) {
                 if (!node || typeof node !== 'object') return;
+                if (node.type === 'CallExpression' && node.callee.name === 'require') {
+                    const dependency = node.arguments[0]?.value || '';
+                    assert.doesNotMatch(
+                        dependency,
+                        /^(?:mysql2?|mariadb)(?:\/|$)/,
+                        `직접 DB 드라이버 사용: ${file}`,
+                    );
+                    if (file.endsWith('routes.js')) {
+                        assert.doesNotMatch(
+                            dependency,
+                            /^(?:sequelize$)|(?:^|\/)(?:models|database)(?:\.js)?$/,
+                            `라우터에서 DB 모듈 사용: ${file}`,
+                        );
+                    }
+                }
                 if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+                    const method = node.callee.property.name ?? node.callee.property.value;
                     assert.ok(
-                        !['query', 'execute', 'literal'].includes(node.callee.property.name),
+                        !['query', 'execute', 'literal'].includes(method),
                         `직접 DB 문장 호출: ${file}`,
                     );
                     if (
@@ -651,7 +662,7 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
                                 'update',
                                 'destroy',
                                 'transaction',
-                            ].includes(node.callee.property.name),
+                            ].includes(method),
                             `라우터 DB 동작: ${file}`,
                         );
                 }
@@ -668,6 +679,73 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
                 }
             }
             inspect(ast);
+        }
+    });
+
+    it('다른 PC에만 원본이 있는 강의는 재개·재변환하지 않고 로컬 재생 가능 여부를 확인한다', async () => {
+        const filename = crypto.randomUUID() + '.mp4';
+        const row = await Lecture.create({
+            course_id: courseId,
+            title: '공유 DB의 영상',
+            description: '다른 서버에서 올린 원본이 이 저장소에 없는 경우',
+            video_file: filename,
+            mime_type: 'video/mp4',
+            video_status: 'PROCESSING',
+        });
+        const url = `/courses/${courseId}/lectures/${row.id}`;
+        await resumeConversions();
+        await waitForConversions();
+        assert.equal((await row.reload()).video_status, 'PROCESSING');
+        const key = crypto.randomUUID();
+        await row.update({ video_status: 'READY', hls_key: key });
+        assert.equal((await admin('POST', url + '/convert')).status, 404);
+        assert.equal((await admin('POST', url + '/playback')).status, 404);
+        assert.equal((await admin('GET', url + '/hls/' + key + '/index.m3u8')).status, 404);
+        assert.equal((await row.reload()).video_status, 'READY');
+        assert.equal(row.hls_key, key);
+        await fs.copyFile(
+            path.join(__dirname, 'fixtures/sample.mp4'),
+            path.join(process.env.UPLOAD_DIR, filename),
+        );
+        assert.equal((await admin('POST', url + '/playback')).json.format, 'original');
+        await admin('DELETE', url);
+    });
+
+    it('변환 중 잘못된 파일로 교체를 요청해도 이전 원본의 변환이 끝난다', async () => {
+        // 이전 변환이 끝나기 전에 교체 요청이 도달하도록 변환 폴더 생성을 잠시 보류한다.
+        const mkdir = fs.mkdir;
+        const pause = Promise.withResolvers();
+        fs.mkdir = async (directory, ...options) => {
+            if (path.dirname(directory) === hlsRoot) await pause.promise;
+            return mkdir(directory, ...options);
+        };
+        let row, timeout;
+        try {
+            const form = new FormData();
+            const sample = await fs.readFile(path.join(__dirname, 'fixtures/sample.mp4'));
+            form.set('title', '영상 교체 실패 검사');
+            form.set('video', new Blob([sample]), 'original.mp4');
+            const created = await admin('POST', `/courses/${courseId}/lectures`, form);
+            assert.equal(created.status, 201);
+            row = await Lecture.findByPk(created.json.lecture.id);
+            const before = row.video_file;
+            const invalid = new FormData();
+            invalid.set('video', new Blob(['invalid video']), 'wrong.mp4');
+            timeout = setTimeout(pause.resolve, 2500);
+            assert.equal(
+                (await admin('PATCH', `/courses/${courseId}/lectures/${row.id}`, invalid)).status,
+                400,
+            );
+            pause.resolve();
+            await waitForConversions();
+            assert.equal((await row.reload()).video_file, before);
+            assert.equal(row.video_status, 'READY');
+        } finally {
+            clearTimeout(timeout);
+            pause.resolve();
+            fs.mkdir = mkdir;
+            await waitForConversions();
+            if (row) await admin('DELETE', `/courses/${courseId}/lectures/${row.id}`);
         }
     });
 

@@ -1,8 +1,12 @@
 const crypto = require('node:crypto');
-const { Op, Validator } = require('sequelize');
+const { Op } = require('sequelize');
 const { sequelize, SignupCode, User, Role } = require('../../models');
 const { fail } = require('../../shared/helpers');
-const { listFields, validateFields } = require('../manager/member-fields.service');
+const {
+    listFields,
+    requireEmailFields,
+    validateFields,
+} = require('../manager/member-fields.service');
 const { publicUser, findUser } = require('./account');
 const { hashPassword } = require('./password');
 const { sendSignupCode, requireMail } = require('./mail');
@@ -20,19 +24,21 @@ function digest(...parts) {
         .digest('hex');
 }
 
+async function checkAvailability({ field, value }) {
+    const configured = (await listFields()).find((item) => item.key === field && item.enabled);
+    if (!configured) fail(404, '등록되지 않은 API입니다.');
+    await validateFields({ [field]: value }, { fields: [configured] });
+    return { available: true, message: `사용할 수 있는 ${configured.label}입니다.` };
+}
+
 async function signupFields(body, partial, transaction) {
-    const fields = await listFields({ transaction, lock: transaction.LOCK.SHARE });
-    if (!fields.some((field) => field.key === 'email' && field.enabled))
-        fail(404, '등록되지 않은 API입니다.');
+    // 최종 저장은 회원 설정 행을 잠근 뒤 검사한다. 기존 중복 때문에 닉네임 인덱스를 보류한 DB도 보호한다.
+    const fields = await requireEmailFields({
+        transaction,
+        lock: partial ? transaction.LOCK.SHARE : transaction.LOCK.UPDATE,
+    });
     const values = await validateFields(body, { fields, transaction, partial });
-    if (!values.email || !Validator.isEmail(values.email)) fail(400, '이메일 형식을 확인하세요.');
-    if (await User.count({ where: { email: values.email }, transaction }))
-        fail(409, '이미 가입한 이메일입니다.');
-    if (
-        values.username &&
-        (await User.count({ where: { username: values.username }, transaction }))
-    )
-        fail(409, '이미 사용 중인 아이디입니다.');
+    if (!values.email) fail(400, '이메일 형식을 확인하세요.');
     return { fields, values };
 }
 
@@ -121,4 +127,4 @@ async function register(req, body) {
     return result;
 }
 
-module.exports = { requestCode, register };
+module.exports = { checkAvailability, requestCode, register };

@@ -25,8 +25,9 @@ export default function InfoPage() {
 function Questions({ user }) {
     const [selectedId, setSelectedId] = useState(null);
     const [draftKey, setDraftKey] = useState(0);
+    const questionPath = selectedId ? '/info/qna/' + selectedId : '/info/qna';
     const list = useResource('/info/qna');
-    const detail = useResource(selectedId ? '/info/qna/' + selectedId : null);
+    const detail = useResource(selectedId ? questionPath : null);
     const selected = detail.data?.question;
     const editable = !selected || selected.user_id === user.id;
     const action = useAction();
@@ -34,6 +35,26 @@ function Questions({ user }) {
         setSelectedId(null);
         setDraftKey((value) => value + 1);
         list.reload();
+    }
+    function saveQuestion(form) {
+        const method = selected ? 'PATCH' : 'POST';
+        const body = {
+            title: form.get('title'),
+            content: form.get('content'),
+            isPrivate: form.has('isPrivate'),
+        };
+        return action.run(() => api(method, questionPath, body), reset);
+    }
+    function deleteQuestion() {
+        return action.run(() => api('DELETE', questionPath), reset);
+    }
+    function saveAnswer(form) {
+        const method = selected.answer === null ? 'POST' : 'PATCH';
+        const body = { answer: form.get('answer') };
+        return action.run(() => api(method, questionPath + '/answer', body), detail.reload);
+    }
+    function deleteAnswer() {
+        return action.run(() => api('DELETE', questionPath + '/answer'), detail.reload);
     }
     return (
         <section>
@@ -52,21 +73,7 @@ function Questions({ user }) {
                     <Form
                         key={selectedId || `new-${draftKey}`}
                         busy={action.busy}
-                        onSubmit={(form) =>
-                            action.run(async () => {
-                                const result = await api(
-                                    selected ? 'PATCH' : 'POST',
-                                    '/info/qna' + (selected ? '/' + selected.id : ''),
-                                    {
-                                        title: form.get('title'),
-                                        content: form.get('content'),
-                                        isPrivate: form.has('isPrivate'),
-                                    },
-                                );
-                                reset();
-                                return result;
-                            })
-                        }
+                        onSubmit={saveQuestion}
                     >
                         <Field
                             label="제목"
@@ -93,19 +100,7 @@ function Questions({ user }) {
                         />
                         {editable && <button>저장</button>}
                         {selected && (editable || user.canManage) && (
-                            <DeleteButton
-                                key={selected.id}
-                                onDelete={() =>
-                                    action.run(async () => {
-                                        const result = await api(
-                                            'DELETE',
-                                            '/info/qna/' + selected.id,
-                                        );
-                                        reset();
-                                        return result;
-                                    })
-                                }
-                            />
+                            <DeleteButton key={selected.id} onDelete={deleteQuestion} />
                         )}
                     </Form>
                 </>
@@ -118,17 +113,7 @@ function Questions({ user }) {
                         <Form
                             key={`${selected.id}:${selected.answer}`}
                             busy={action.busy}
-                            onSubmit={(form) =>
-                                action.run(async () => {
-                                    const result = await api(
-                                        selected.answer === null ? 'POST' : 'PATCH',
-                                        `/info/qna/${selected.id}/answer`,
-                                        Object.fromEntries(form),
-                                    );
-                                    detail.reload();
-                                    return result;
-                                })
-                            }
+                            onSubmit={saveAnswer}
                         >
                             <Field
                                 label="답변"
@@ -139,20 +124,7 @@ function Questions({ user }) {
                             />
                             <button>답변 저장</button>
                             {selected.answer !== null && (
-                                <DeleteButton
-                                    onDelete={() =>
-                                        action.run(async () => {
-                                            const result = await api(
-                                                'DELETE',
-                                                `/info/qna/${selected.id}/answer`,
-                                            );
-                                            detail.reload();
-                                            return result;
-                                        })
-                                    }
-                                >
-                                    답변 삭제
-                                </DeleteButton>
+                                <DeleteButton onDelete={deleteAnswer}>답변 삭제</DeleteButton>
                             )}
                         </Form>
                     )}

@@ -1,45 +1,61 @@
-# 코드 읽는 순서
-
-처음에는 파일 전체를 외우기보다 요청 한 건을 따라간다. 필요한 함수 설명은 [파일·함수 안내서](functions.md)에서 찾는다.
-
-## 1. 가장 짧은 흐름: 관리자 강좌 추가
-
-1. [app.js](../src/app.js): `/api/courses`를 강좌 라우터에 연결한다.
-2. [courses/routes.js](../src/modules/courses/routes.js): POST 요청을 받고 `requireAdmin` 후 `service.create(req.body)`를 호출한다.
-3. [courses/service.js](../src/modules/courses/service.js)의 `create`: 제목·설명 등을 검사하고 `Course.create`로 저장한다.
-4. [models.js](../src/models.js)의 `Course`: 어떤 속성이 어떤 MySQL 열에 들어갈지 정의한다.
-5. [database.js](../src/database.js): 모델이 사용하는 MySQL 연결이다.
-6. 다시 routes.js: 반환값을 `res.status(201).json(...)`으로 보낸다.
+# 화면에서 서버까지 읽는 순서
 
 ```text
-POST /api/courses + JSON
- → routes: 요청 받기
- → service.create: 검사·저장
- → Course 모델: DB 열에 매핑
- → routes: 201 + JSON 응답
+client/src/App.jsx               화면 주소 → React 페이지
+  pages/manager/                 회원 관리 · 회원 그룹 · 가입/로그인 설정 · 메일 관리 · 메일 발송
+  pages/courses/                 강좌 목록 · 강좌 상세 · 강의 재생 · 관리자 편집
+  pages/RegisterPage.jsx         학생 가입
+  shared/                        회원 입력칸 · 세션 상태 · HTTP 요청
+src/app.js                       /api 주소 → Express 라우터
+  modules/auth/                  가입 · 로그인 · 소셜 연결 · 이메일 발송
+  modules/manager/               회원 · 그룹 · 항목 설정 · 발신자 등록 · 학생 메일
+  modules/courses/               강좌 · 하위 강의 · 시청 권한 · 업로드
+  modules/boards/ · info/ · user/ 공지 · Q&A · 내 정보
+src/models.js → src/database.js   Sequelize 모델 → MySQL
+tests/                           기능별 Mocha 테스트
 ```
 
-라우터의 `(req, res)`에서 req는 요청 정보, res는 응답 도구다. 기능 함수의 `(body)`는 필요한 입력만 받는 일반 함수다. 기능 함수는 HTTP 응답 대신 결과를 반환하고, 문제가 있으면 오류를 던진다.
+## 수정하려는 기능에서 출발하기
 
-## 2. 그다음 읽을 서버 코드
+| 고치고 싶은 동작                | React에서 시작                                                                                                                       | 서버에서 이어 읽기                                                                                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 회원 승인·역할·학생별 시청 기간 | [회원 선택](../client/src/pages/manager/MemberManager.jsx), [시청 권한](../client/src/pages/manager/StudentAccess.jsx)               | [관리 라우터](../src/modules/manager/routes.js) → [회원 승인](../src/modules/manager/service.js) · [역할](../src/modules/manager/roles.service.js) · [학생별 시청 권한](../src/modules/manager/lecture-access.service.js) |
+| 가입·로그인 옵션                | [설정 스위치](../client/src/pages/manager/MemberSettings.jsx), [로그인 화면](../client/src/pages/LoginPage.jsx)                      | [회원 항목 정책](../src/modules/manager/member-fields.service.js)                                                                                                                                                         |
+| 가입 중복 확인과 인증코드       | [가입 화면](../client/src/pages/RegisterPage.jsx), [공통 입력과 중복 확인](../client/src/shared/MemberFields.jsx)                    | [인증 API](../src/modules/auth/routes.js) → [가입 서비스](../src/modules/auth/register.service.js)                                                                                                                        |
+| 그룹 편성·강의 권한             | [그룹 편집](../client/src/pages/manager/GroupManager.jsx), [일괄 권한](../client/src/pages/manager/GroupAccess.jsx)                  | [그룹 라우터](../src/modules/manager/groups.routes.js) → [소속·권한 서비스](../src/modules/manager/groups.service.js)                                                                                                     |
+| 학생 안내 메일 작성·발송 결과   | [발송 화면](../client/src/pages/manager/MailCompose.jsx), [공통 학생 체크 목록](../client/src/pages/manager/StudentChecklist.jsx)    | [발송 라우터](../src/modules/manager/broadcast.routes.js) → [수신자 검사·발송 처리](../src/modules/manager/broadcast.service.js)                                                                                          |
+| 발신자 교체                     | [메일 관리](../client/src/pages/manager/MailSettings.jsx)                                                                            | [메일 확인·적용](../src/modules/manager/mail.service.js) → [비공개 설정 저장](../src/modules/manager/mail-sender.store.js). 실제 발송은 [메일 전송](../src/modules/auth/mail.js)이 담당한다.                              |
+| 관리자에게 편집 버튼 표시       | [학생·원장 공용 강좌 페이지](../client/src/pages/courses/CoursesPage.jsx), [강좌 편집](../client/src/pages/courses/CourseEditor.jsx) | [강좌 라우터](../src/modules/courses/routes.js) → [강좌 서비스](../src/modules/courses/service.js)                                                                                                                        |
+| 영상 업로드·수정                | [강의 편집](../client/src/pages/courses/LectureEditor.jsx)                                                                           | [강의 라우터](../src/modules/courses/lectures.routes.js) → [강의 서비스](../src/modules/courses/lectures.service.js)                                                                                                      |
+| 영상 모듈 교체                  | [강의 시청 화면](../client/src/pages/courses/LecturePage.jsx) → [플레이어](../client/src/pages/courses/VideoPlayer.jsx)              | [권한 검사](../src/modules/courses/access.js) → [변환·미디어 파일](../src/modules/courses/video.js)                                                                                                                       |
 
-| 순서 | 파일                                                           | 확인할 내용                                |
-| ---- | -------------------------------------------------------------- | ------------------------------------------ |
-| 1    | shared/helpers.js                                              | text·id·bool, requireLogin·requireAdmin    |
-| 2    | auth/password.js                                               | 반복 해시 저장·검증                        |
-| 3    | auth/routes.js → auth/register.service.js 또는 auth/service.js | 이메일 가입 또는 일반 로그인·비밀번호 변경 |
-| 4    | auth/account.js → middleware/session-user.js                   | 현재 회원과 세션 버전 검사                 |
-| 5    | manager/member-fields.service.js                               | 항목 ON/OFF 공통 정책                      |
-| 6    | user/routes.js → user/service.js                               | 본인 프로필 수정                           |
-| 7    | manager/routes.js → manager/service.js                         | 관리자 수정·역할·시청 허용                 |
-| 8    | courses/access.js → lectures.service.js                        | 영상별 권한과 재생                         |
-| 9    | auth/social.service.js → google.client.js                      | 소셜 인증·연결·복구                        |
-| 10   | database/migrate.js → tests/*.test.js                          | 기존 DB 준비와 실제 검사                   |
+## 처음 따라갈 요청 하나
 
-각 행의 서버 파일은 `src/` 기준이며 이름이 같은 routes.js는 상위 폴더까지 확인한다.
+**강좌 이름 수정**을 예로 든다. 원장님이 학생과 같은 강좌 상세에서 편집 모드를 켠다. `CourseEditor`에서 저장을 누르면 [공통 HTTP 함수](../client/src/shared/api.js)가 `PATCH /api/courses/:courseId`를 호출한다. 강좌 라우터는 [관리자 검사](../src/shared/helpers.js)를 거쳐 서비스에 요청값을 전달한다. 서비스가 [Course 모델](../src/models.js)로 저장하고 화면이 새 값을 읽는다. 학생에게는 편집 UI가 숨겨지며 같은 변경 API에도 권한 검사가 적용된다.
 
-## 3. 화면은 나중에 연결해서 보기
+하연이가 플레이어를 바꿀 때 [VideoPlayer.jsx](../client/src/pages/courses/VideoPlayer.jsx)의 `src`, `format`, `onError` 입력을 유지하면 나머지 화면에서 같은 방식으로 재생할 수 있다. 영상 공급자를 바꿀 때에도 학생에게 재생 주소를 발급하는 API의 시청 권한 검사를 유지한다.
 
-`client/src/main.jsx` → `App.jsx` → `pages/manager/ManagerPage.jsx` → 회원/강좌 컴포넌트 → `shared/api.js` 순서다. 실제 화면 입력은 MemberFields가 만들고, 항목 ON/OFF 값은 AuthProvider가 읽어 공유한다. 목록이나 상단의 회원 표시를 바꾸려면 [memberLabel.mjs](../client/src/shared/memberLabel.mjs)를 본다. 이 함수는 현재 켜 둔 닉네임·아이디·이메일 중 어떤 값을 보여 줄지 정한다.
+## 데이터 관계
 
-연습할 때는 서비스의 완료 문구 한 곳을 바꾸고 API 결과를 확인한 다음, 필드 검증과 Mocha 검사를 함께 읽는다. DB 속성을 바꾸는 작업은 모델과 마이그레이션을 함께 확인한다. 공유 DB 자료로 테스트 초기화를 하지 않는다.
+```mermaid
+erDiagram
+    roles ||--o{ users : "역할"
+    users ||--o{ kakao_accounts : "카카오 연결"
+    users ||--o{ google_accounts : "구글 연결"
+    courses ||--o{ lectures : "강좌 안의 강의"
+    users ||--o{ lecture_access : "학생별 허용"
+    lectures ||--o{ lecture_access : "허용된 강의"
+    users ||--o{ questions : "질문"
+    users ||--o{ boards : "공지"
+    users ||--o{ password_resets : "초기화 토큰"
+```
+
+`group_members`는 학생과 반의 소속 관계를 저장한다. 일괄 부여 결과는 `lecture_access`에 저장되고 학생 안내 메일의 요청과 결과는 `mail_broadcasts`, `mail_broadcast_deliveries`에 저장된다.
+
+member_fields는 사이트 전체의 회원 항목 정책이다. 회원별 권한과는 별개이며 가입·프로필·관리자 응답이 같은 설정을 읽는다.
+
+signup_codes는 가입 전 주소별 인증 정보를 보관한다. 회원은 코드 검증이 끝나야 users에 생기므로 이 테이블에는 회원 번호가 없다.
+
+## 강좌 아래에 강의 라우터를 연결하는 이유
+
+`courses/routes.js`의 `router.use('/:courseId/lectures', ...)`가 강의 Router를 연결한다. 따라서 주소는 `/api/courses/1/lectures/2`지만 코드는 강좌 함수와 강의 함수로 나뉜다. `mergeParams:true`로 상위 courseId를 전달하고 서버에서 해당 강의가 그 강좌에 속하는지도 검사한다.

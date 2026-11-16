@@ -2,9 +2,11 @@ const { sequelize, Role, User } = require('../src/models');
 const { text, email, username } = require('../src/shared/helpers');
 const { hashPassword } = require('../src/modules/auth/password');
 const { migrate } = require('../database/migrate');
+const { ensureFieldDefaults } = require('../src/modules/manager/member-fields.service');
 
 async function initialize() {
     const result = await migrate();
+    await ensureFieldDefaults();
     if (result.duplicateNicknames)
         console.warn('테이블 준비 완료. 기존 중복 닉네임의 고유 제약만 적용을 보류했습니다.');
     await Role.findOrCreate({

@@ -3,6 +3,7 @@ const session = require('express-session');
 const health = require('./health');
 const { isConnectionLimit } = require('./database');
 const { currentUser, sameOrigin } = require('./middleware/session-user');
+const createSocialRouter = require('./modules/auth/social.routes');
 
 const app = express();
 app.set('json spaces', 2);
@@ -43,10 +44,14 @@ app.use(sameOrigin);
 
 app.get('/health', async (req, res) => res.json(await health.status(req.user)));
 
-app.use('/auth/kakao', require('./modules/auth/kakao.routes'));
-app.use('/api/auth/kakao', require('./modules/auth/kakao.routes'));
-app.use('/auth/google', require('./modules/auth/google.routes'));
-app.use('/api/auth/google', require('./modules/auth/google.routes'));
+app.use(
+    ['/auth/kakao', '/api/auth/kakao'],
+    createSocialRouter(require('./modules/auth/kakao.service')),
+);
+app.use(
+    ['/auth/google', '/api/auth/google'],
+    createSocialRouter(require('./modules/auth/google.service')),
+);
 app.use('/api/auth', require('./modules/auth/routes'));
 app.use('/api/user', require('./modules/user/routes'));
 app.use('/api/manager', require('./modules/manager/routes'));

@@ -12,16 +12,10 @@ if (!['127.0.0.1', 'localhost'].includes(process.env.DB_HOST))
 process.env.DB_NAME = 'mathsite_test';
 process.env.DB_SSL = 'false';
 process.env.MAIL_TRANSPORT = 'file';
-for (const key of [
-    'SMTP_HOST',
-    'SMTP_PORT',
-    'SMTP_SECURE',
-    'SMTP_USER',
-    'SMTP_PASSWORD',
-    'MAIL_FROM',
-]) {
-    // src/database.js가 .env를 다시 읽을 때 실제 SMTP 설정을 불러오지 않게 한다.
-    process.env[key] = '';
-}
+// 시험마다 전용 경로에서 시작해 운영 서버의 발신 계정을 사용하지 않는다.
+process.env.MAIL_SETTINGS_FILE = path.join(
+    require('node:os').tmpdir(),
+    'mathsite-mail-test-' + require('node:crypto').randomUUID() + '.json',
+);
 delete process.env.HLS_DIR;
 delete process.env.DB_SSL_CA;

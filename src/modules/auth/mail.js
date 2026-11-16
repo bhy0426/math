@@ -3,12 +3,72 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fail } = require('../../shared/helpers');
+const { readSender } = require('../manager/mail-sender.store');
+
+// 발신자는 디스크에 암호화하고, 현재 서버에서 마지막으로 확인한 접속 결과만 메모리에 둔다.
+const connections = new WeakMap();
+const checksInFlight = new WeakMap();
+
+function connectionState(sender) {
+    if (!sender) return { connectionStatus: 'unregistered', checkedAt: null };
+    return connections.get(sender) || { connectionStatus: 'unchecked', checkedAt: null };
+}
+
+function recordConnection(sender, connectionStatus, checkedAt = new Date().toISOString()) {
+    connections.set(sender, { connectionStatus, checkedAt });
+}
+
+function failureStatus(error) {
+    // SMTP 4xx는 인증 단계에서 발생해도 제공자가 재시도를 요청한 일시 장애다.
+    if (error?.responseCode >= 400 && error.responseCode < 500) return 'unavailable';
+    return error?.code === 'EAUTH' || error?.responseCode === 535 ? 'auth_failed' : 'unavailable';
+}
 
 function mailConfigured() {
-    const { SMTP_HOST, SMTP_USER, SMTP_PASSWORD, MAIL_FROM, APP_URL } = process.env;
-    if (!SMTP_HOST || !MAIL_FROM || !APP_URL) return false;
-    if (SMTP_HOST.toLowerCase() === 'smtp.gmail.com') return Boolean(SMTP_USER && SMTP_PASSWORD);
-    return Boolean(SMTP_USER) === Boolean(SMTP_PASSWORD);
+    try {
+        const sender = readSender();
+        return Boolean(sender) && connectionState(sender).connectionStatus !== 'auth_failed';
+    } catch (error) {
+        if (error.status === 503) return false;
+        throw error;
+    }
+}
+
+function openSmtp(sender) {
+    if (!sender) fail(503, '학원 관리에서 발신 계정을 등록하세요.');
+    return nodemailer.createTransport({
+        host: sender.email.endsWith('@naver.com') ? 'smtp.naver.com' : 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: { user: sender.email, pass: sender.appPassword },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        disableFileAccess: true,
+        disableUrlAccess: true,
+    });
+}
+
+async function verifyConnection(sender) {
+    const transport = openSmtp(sender);
+    try {
+        await transport.verify();
+        recordConnection(sender, 'connected');
+    } catch (error) {
+        recordConnection(sender, failureStatus(error));
+    } finally {
+        transport.close();
+    }
+}
+
+// 여러 관리자가 동시에 탭을 열어도 동일한 SMTP 인증 결과를 사용한다.
+function checkConnection(sender) {
+    if (!checksInFlight.has(sender)) {
+        const check = verifyConnection(sender).finally(() => checksInFlight.delete(sender));
+        checksInFlight.set(sender, check);
+    }
+    return checksInFlight.get(sender);
 }
 
 function canSendResetEmail() {
@@ -51,8 +111,38 @@ async function sendSignupCode(email, code) {
     );
 }
 
-async function deliver(email, subject, text, testDirectory, testMessage) {
+async function sendSenderCode(sender, code) {
+    return deliver(
+        sender.email,
+        'MathSite 발신 주소 등록',
+        `발신 주소를 등록하려면 10분 안에 관리자 화면에 인증코드 ${code}를 입력하세요.`,
+        process.env.SIGNUP_MAIL_DIR || '.local/test-sender-mail',
+        { email: sender.email, code },
+        sender,
+    );
+}
+
+// 학생 안내 메일도 관리자가 메일함 인증을 마친 같은 발신 계정을 쓴다.
+async function sendStudentMail(email, subject, body, expectedSender) {
+    if (!expectedSender || readSender() !== expectedSender)
+        fail(409, '발신 계정이 변경됐습니다. 발송 대상을 다시 확인하세요.');
+    requireMail('학생 안내');
+    return deliver(
+        email,
+        subject,
+        body,
+        process.env.BROADCAST_MAIL_DIR || '.local/test-broadcast-mail',
+        {
+            email,
+            subject,
+            body,
+        },
+    );
+}
+
+async function deliver(email, subject, text, testDirectory, testMessage, candidate) {
     if (process.env.MAIL_TRANSPORT === 'file') {
+        if (!canSendResetEmail()) fail(503, '메일 전송 설정을 확인하세요.');
         await fs.mkdir(testDirectory, { recursive: true });
         await fs.writeFile(
             path.join(testDirectory, `${crypto.randomUUID()}.json`),
@@ -60,31 +150,45 @@ async function deliver(email, subject, text, testDirectory, testMessage) {
         );
         return;
     }
-    const transport = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true',
-        requireTLS: process.env.SMTP_SECURE !== 'true',
-        ...(process.env.SMTP_USER
-            ? { auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } }
-            : {}),
-        connectionTimeout: 10000,
-        socketTimeout: 10000,
-        disableFileAccess: true,
-        disableUrlAccess: true,
-    });
+    const sender = candidate || readSender();
+    const transport = openSmtp(sender);
     try {
         await transport.sendMail({
-            from: process.env.MAIL_FROM,
+            from: sender.email,
             to: email,
             subject,
             text,
         });
-    } catch {
-        fail(502, '메일 발송에 실패했습니다. 잠시 후 다시 시도하세요.');
+        recordConnection(sender, 'connected');
+    } catch (error) {
+        // 개별 수신자 거절은 발신 계정의 인증 장애로 표시하지 않는다.
+        if (!['EENVELOPE', 'EMESSAGE'].includes(error?.code))
+            recordConnection(sender, failureStatus(error));
+        if (candidate)
+            fail(
+                502,
+                '확인 메일을 보내지 못했습니다. 메일 제공자의 2단계 인증·앱 비밀번호·SMTP 설정을 확인하세요.',
+            );
+        const failure = new Error('메일 발송에 실패했습니다. 잠시 후 다시 시도하세요.');
+        failure.status = 502;
+        failure.expose = true;
+        // 최종 SMTP 응답을 못 받았으면 이미 전달됐을 수도 있다.
+        failure.deliveryUncertain =
+            !error?.responseCode && !['EAUTH', 'EENVELOPE', 'EDNS'].includes(error?.code);
+        throw failure;
     } finally {
         transport.close();
     }
 }
 
-module.exports = { sendReset, sendSignupCode, requireMail, mailConfigured, canSendResetEmail };
+module.exports = {
+    sendReset,
+    sendSignupCode,
+    sendSenderCode,
+    sendStudentMail,
+    requireMail,
+    connectionState,
+    recordConnection,
+    checkConnection,
+    canSendResetEmail,
+};

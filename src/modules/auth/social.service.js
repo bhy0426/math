@@ -124,7 +124,7 @@ function createSocialService(name, getConfig, client, accounts) {
     }
     async function register(req, body) {
         const accountId = await sequelize.transaction(async (transaction) => {
-            const fields = await listFields({ transaction, lock: transaction.LOCK.SHARE });
+            const fields = await listFields({ transaction, lock: transaction.LOCK.UPDATE });
             if (usesEmailSignup(fields)) fail(404, '등록되지 않은 API입니다.');
             const pending = validPending(req, configRequired());
             if (!pending || req.user) fail(400, '소셜 인증 후 10분 안에 가입 정보를 입력하세요.');

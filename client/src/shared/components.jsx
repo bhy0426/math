@@ -8,6 +8,7 @@ import { memberLabel } from './memberLabel.mjs';
 
 export function Layout({ children }) {
     const { user, setUser, fields, error } = useAuth();
+    const viewer = user ? `${user.id}:${user.canManage}` : 'guest';
     const action = useAction();
     const navigate = useNavigate();
     return (
@@ -24,7 +25,7 @@ export function Layout({ children }) {
                     {user ? (
                         <>
                             <Link to="/user">{memberLabel(user, fields)} · 내 정보</Link>
-                            {user.canManage && <Link to="/manager">관리자</Link>}
+                            {user.canManage && <Link to="/manager">학원 관리</Link>}
                             <button
                                 disabled={action.busy}
                                 onClick={() =>
@@ -44,8 +45,8 @@ export function Layout({ children }) {
                 </nav>
                 {(error || action.message) && <p role="status">{error || action.message}</p>}
             </header>
-            <main>{children}</main>
-            {user && <PopupNotice key={user.id} />}
+            <main key={viewer}>{children}</main>
+            {user && <PopupNotice key={'popup:' + viewer} />}
         </>
     );
 }
