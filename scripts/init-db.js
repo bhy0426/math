@@ -2,7 +2,7 @@ const { sequelize, Role, User } = require('../src/models');
 const { text, email, username } = require('../src/shared/helpers');
 const { hashPassword } = require('../src/modules/auth/password');
 const { migrate } = require('../database/migrate');
-const { ensureFieldDefaults } = require('../src/modules/manager/member-fields.service');
+const { ensureFieldDefaults } = require('../src/modules/user/member-fields.service');
 
 async function initialize() {
     const result = await migrate();

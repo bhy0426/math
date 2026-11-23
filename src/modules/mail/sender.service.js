@@ -5,8 +5,8 @@ const {
     connectionState,
     recordConnection,
     checkConnection,
-} = require('../auth/mail');
-const { readSender, writeSender } = require('./mail-sender.store');
+} = require('./transport');
+const { readSender, writeSender } = require('./sender.store');
 
 const verificationLifetime = 10 * 60 * 1000;
 const resendInterval = 60 * 1000;

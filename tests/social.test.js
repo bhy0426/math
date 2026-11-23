@@ -9,14 +9,7 @@ process.env.GOOGLE_CLIENT_ID = 'synthetic-google-client';
 process.env.GOOGLE_CLIENT_SECRET = 'synthetic-google-secret';
 process.env.KAKAO_REST_API_KEY = 'synthetic-kakao-client';
 process.env.KAKAO_CLIENT_SECRET = 'synthetic-kakao-secret';
-const {
-    sequelize,
-    User,
-    GoogleAccount,
-    KakaoAccount,
-    MemberField,
-    PasswordReset,
-} = require('../src/models');
+const { sequelize, User, SocialAccount, MemberField, PasswordReset } = require('../src/models');
 const { resetData } = require('./reset-data');
 const { openMailbox, closeMailbox, registerByEmail, requestCode } = require('./signup-mail');
 const { client } = require('./http-client');
@@ -450,8 +443,12 @@ describe('구글·카카오 복구와 회원 항목 설정', () => {
             assert.equal((await returning('GET', '/user')).json.user.canManage, true);
         } finally {
             await owner.update({ username: 'admin' });
-            await GoogleAccount.destroy({
-                where: { user_id: owner.id, google_id: 'owner-switch-test' },
+            await SocialAccount.destroy({
+                where: {
+                    provider: 'google',
+                    user_id: owner.id,
+                    provider_user_id: 'owner-switch-test',
+                },
             });
             await configure(['username', 'nickname', 'email']);
         }

@@ -4,7 +4,7 @@ const { sequelize, Role, User } = require('../../models');
 const { hashPassword } = require('./password');
 const { findUser, publicUser } = require('./account');
 const { saveSession, regenerateSession, loginSession } = require('./session');
-const { listFields, validateFields } = require('../manager/member-fields.service');
+const { listFields, validateFields } = require('../user/member-fields.service');
 
 function usesEmailSignup(fields) {
     return fields.some((field) => field.key === 'email' && field.enabled);

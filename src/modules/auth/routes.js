@@ -1,7 +1,6 @@
 const router = require('express').Router();
 const service = require('./service');
 const signup = require('./register.service');
-const fields = require('../manager/member-fields.service');
 
 router.use((req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
@@ -9,7 +8,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/status', (req, res) => res.json(service.status(req.user)));
-router.get('/fields', async (req, res) => res.json(await fields.publicConfiguration()));
+router.get('/fields', async (req, res) => res.json(await service.publicConfiguration()));
 router.post('/register/check', async (req, res) =>
     res.json(await signup.checkAvailability(req.body)),
 );

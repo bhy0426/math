@@ -1,5 +1,6 @@
 const { DataTypes, Op, fn, col, where } = require('sequelize');
 const { sequelize, User, Lecture } = require('../src/models');
+const { migrateSocialAccounts } = require('./migrate-social-accounts');
 
 async function migrate() {
     const mapping = sequelize.getQueryInterface();
@@ -55,6 +56,7 @@ async function migrate() {
         if (model === User && tables.includes('users')) continue;
         await model.sync();
     }
+    const socialAccounts = await migrateSocialAccounts();
     if (tables.includes('users') && !duplicateNicknames) {
         const indexes = await mapping.showIndex('users');
         if (!indexes.some((index) => index.name === 'users_nickname_unique'))
@@ -67,7 +69,7 @@ async function migrate() {
         { video_status: 'ORIGINAL' },
         { where: { video_file: { [Op.ne]: null }, video_status: 'NO_VIDEO' } },
     );
-    return { duplicateNicknames };
+    return { duplicateNicknames, socialAccounts };
 }
 
 module.exports = { migrate };

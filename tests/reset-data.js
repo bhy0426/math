@@ -1,8 +1,7 @@
 const assert = require('node:assert/strict');
 const {
     sequelize,
-    KakaoAccount,
-    GoogleAccount,
+    SocialAccount,
     MemberField,
     Group,
     GroupMember,
@@ -25,8 +24,7 @@ async function resetData() {
     assert.ok(['localhost', '127.0.0.1'].includes(sequelize.config.host));
     await initialize();
     for (const model of [
-        KakaoAccount,
-        GoogleAccount,
+        SocialAccount,
         MemberField,
         GroupMember,
         Group,

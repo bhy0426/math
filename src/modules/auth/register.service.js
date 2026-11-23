@@ -2,14 +2,10 @@ const crypto = require('node:crypto');
 const { Op } = require('sequelize');
 const { sequelize, SignupCode, User, Role } = require('../../models');
 const { fail } = require('../../shared/helpers');
-const {
-    listFields,
-    requireEmailFields,
-    validateFields,
-} = require('../manager/member-fields.service');
+const { listFields, requireEmailFields, validateFields } = require('../user/member-fields.service');
 const { publicUser, findUser } = require('./account');
 const { hashPassword } = require('./password');
-const { sendSignupCode, requireMail } = require('./mail');
+const { sendSignupCode, requireMail } = require('../mail/transport');
 
 const EXPIRES_SECONDS = 600;
 const RESEND_SECONDS = 60;

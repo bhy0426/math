@@ -36,26 +36,32 @@ const User = define(
     },
     { indexes: [{ name: 'users_nickname_unique', unique: true, fields: ['name'] }] },
 );
-const KakaoAccount = define(
-    'kakao_accounts',
+const SocialAccount = define(
+    'social_accounts',
     {
+        provider: { type: DataTypes.ENUM('kakao', 'google'), primaryKey: true },
         app_key_hash: { type: DataTypes.CHAR(64), primaryKey: true },
-        kakao_id: { type: DataTypes.STRING(32), primaryKey: true },
+        provider_user_id: { type: DataTypes.STRING(255), primaryKey: true },
         user_id: required(DataTypes.INTEGER.UNSIGNED),
+        // 카카오는 앱별로, 구글은 모든 앱을 통틀어 회원당 한 계정만 연결한다.
+        user_scope: required(DataTypes.STRING(64)),
         created_at: createdAt(),
     },
     {
         indexes: [
-            { name: 'one_kakao_per_user', unique: true, fields: ['app_key_hash', 'user_id'] },
+            {
+                name: 'one_social_account_per_user_scope',
+                unique: true,
+                fields: ['provider', 'user_scope', 'user_id'],
+            },
         ],
+        hooks: {
+            beforeValidate(account) {
+                account.user_scope = account.provider === 'google' ? '' : account.app_key_hash;
+            },
+        },
     },
 );
-const GoogleAccount = define('google_accounts', {
-    client_id_hash: { type: DataTypes.CHAR(64), primaryKey: true },
-    google_id: { type: DataTypes.STRING(255), primaryKey: true },
-    user_id: { ...required(DataTypes.INTEGER.UNSIGNED), unique: true },
-    created_at: createdAt(),
-});
 const MemberField = define('member_fields', {
     key: { type: DataTypes.STRING(20), primaryKey: true },
     enabled: { ...required(DataTypes.BOOLEAN), defaultValue: true },
@@ -147,8 +153,7 @@ const SignupCode = define(
 
 User.belongsTo(Role, { as: 'roleRecord', foreignKey: 'role_id', onDelete: 'RESTRICT' });
 Role.hasMany(User, { as: 'users', foreignKey: 'role_id', onDelete: 'RESTRICT' });
-KakaoAccount.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
-GoogleAccount.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
+SocialAccount.belongsTo(User, { as: 'user', foreignKey: 'user_id', onDelete: 'CASCADE' });
 Group.hasMany(GroupMember, { as: 'memberships', foreignKey: 'group_id', onDelete: 'CASCADE' });
 GroupMember.belongsTo(Group, { as: 'group', foreignKey: 'group_id', onDelete: 'CASCADE' });
 GroupMember.belongsTo(User, { as: 'student', foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -173,8 +178,7 @@ module.exports = {
     sequelize,
     Role,
     User,
-    KakaoAccount,
-    GoogleAccount,
+    SocialAccount,
     MemberField,
     Group,
     GroupMember,

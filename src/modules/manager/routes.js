@@ -4,8 +4,8 @@ const service = require('./service');
 const roles = require('./roles.service');
 const access = require('./lecture-access.service');
 const { requestAdminReset } = require('../auth/service');
-const fields = require('./member-fields.service');
-const mail = require('./mail.service');
+const fields = require('../user/member-fields.service');
+const settings = require('./member-settings.service');
 
 router.use(requireAdmin);
 router.use(['/mail', '/broadcasts'], async (_req, res, next) => {
@@ -15,14 +15,9 @@ router.use(['/mail', '/broadcasts'], async (_req, res, next) => {
 });
 router.use('/groups', require('./groups.routes'));
 router.use('/broadcasts', require('./broadcast.routes'));
-router.get('/mail', (req, res) => res.json(mail.status(req.sessionID)));
-router.post('/mail/check', async (req, res) => res.json(await mail.check(req.sessionID)));
-router.post('/mail/verification', async (req, res) =>
-    res.json(await mail.requestVerification(req.sessionID, req.body)),
-);
-router.post('/mail/confirm', (req, res) => res.json(mail.confirm(req.sessionID, req.body)));
+router.use('/mail', require('../mail/routes'));
 router.get('/member-fields', async (req, res) => res.json({ fields: await fields.listFields() }));
-router.patch('/member-fields', async (req, res) => res.json(await fields.editFields(req.body)));
+router.patch('/member-fields', async (req, res) => res.json(await settings.editFields(req.body)));
 router.get('/users', async (req, res) => res.json(await service.listUsers()));
 router.get('/users/:userId', async (req, res) =>
     res.json({ user: await service.getUser(req.params.userId) }),

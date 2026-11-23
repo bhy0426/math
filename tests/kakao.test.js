@@ -8,7 +8,7 @@ process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 process.env.UPLOAD_DIR = require('node:path').resolve('.local/kakao-test-uploads');
 process.env.KAKAO_REST_API_KEY = 'synthetic-test-client';
 process.env.KAKAO_CLIENT_SECRET = 'synthetic-test-secret';
-const { sequelize, User, Role, Course, Lecture, KakaoAccount } = require('../src/models');
+const { sequelize, User, Role, Course, Lecture, SocialAccount } = require('../src/models');
 const { resetData } = require('./reset-data');
 const app = require('../src/app');
 const { client: httpClient } = require('./http-client');
@@ -214,7 +214,7 @@ describe('카카오 로그인 통합 테스트', function () {
             ).status,
             409,
         );
-        assert.equal((await KakaoAccount.count().then((total) => [{ total }]))[0].total, 0);
+        assert.equal(await SocialAccount.count({ where: { provider: 'kakao' } }), 0);
         const created = await request('POST', '/auth/kakao/register', {
             nickname: '카카오 학생',
             username: 'kakao_student',
@@ -234,7 +234,8 @@ describe('카카오 로그인 통합 테스트', function () {
         }).then((row) => [{ id: row.id, code: row.roleRecord.code }]);
         assert.equal(account.code, 'student');
         assert.equal(
-            (await KakaoAccount.findAll({ where: { user_id: account.id }, raw: true }))[0].kakao_id,
+            (await SocialAccount.findOne({ where: { provider: 'kakao', user_id: account.id } }))
+                .provider_user_id,
             '100001',
         );
         await admin('PATCH', `/manager/users/${account.id}/status`, { status: 'active' });
@@ -329,8 +330,11 @@ describe('카카오 로그인 통합 테스트', function () {
             201,
         );
         assert.equal(
-            (await KakaoAccount.findAll({ where: { kakao_id: '9007199254740993' }, raw: true }))[0]
-                .kakao_id,
+            (
+                await SocialAccount.findOne({
+                    where: { provider: 'kakao', provider_user_id: '9007199254740993' },
+                })
+            ).provider_user_id,
             '9007199254740993',
         );
         const calls = upstreamCalls;

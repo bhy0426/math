@@ -1,6 +1,8 @@
 # 카카오·구글 로그인과 비밀번호 복구
 
-2026-11-16. 두 공급자는 같은 `auth/social.service.js` 흐름을 사용하고 실제 통신·테이블 저장만 공급자별 파일로 나뉜다.
+2026-11-23 구조 기준. 두 공급자는 `auth/social.service.js`의 인증 흐름과 `auth/social.repository.js`의 계정 저장 함수를 공유한다. 외부 API 통신과 설정은 `kakao.client.js`·`google.client.js`, `kakao.config.js`·`google.config.js`에서 각각 처리한다.
+
+연결 정보는 `social_accounts`에 저장한다. `provider`, `app_key_hash`, `provider_user_id`가 외부 계정을 식별하고 `user_id`가 기존 MathSite 회원을 가리킨다. `user_scope`로 카카오의 앱별 연결과 구글의 회원당 한 계정 제약을 보존한다. 기존 두 테이블의 연결·생성 시각은 백업 후 통합한다. [DB 이관 절차](HANDOFF.md#소셜-계정-테이블-이관)
 
 ## Google Cloud 준비
 

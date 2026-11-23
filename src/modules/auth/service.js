@@ -5,11 +5,19 @@ const { fail, text, id } = require('../../shared/helpers');
 const { findUser, publicUser } = require('./account');
 const { hashPassword, verifyPassword, needsRehash } = require('./password');
 const { loginSession, regenerateSession } = require('./session');
-const { requireMail, sendReset } = require('./mail');
-const { listFields, requireEmailFields } = require('../manager/member-fields.service');
+const { requireMail, sendReset, canSendResetEmail } = require('../mail/transport');
+const { listFields, requireEmailFields } = require('../user/member-fields.service');
 
 function status(user) {
     return { loggedIn: Boolean(user), user: user || null };
+}
+
+async function publicConfiguration() {
+    const fields = (await listFields()).filter((field) => field.enabled);
+    return {
+        fields,
+        canRequestResetEmail: fields.some((field) => field.key === 'email') && canSendResetEmail(),
+    };
 }
 
 async function login(req, body) {
@@ -158,6 +166,7 @@ async function currentAccount(req) {
 
 module.exports = {
     status,
+    publicConfiguration,
     login,
     logout,
     requestAdminReset,

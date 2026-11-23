@@ -1,7 +1,7 @@
 const { fail } = require('../../shared/helpers');
 const { sequelize } = require('../../models');
 const { findUser, publicUser } = require('../auth/account');
-const { listFields, validateFields } = require('../manager/member-fields.service');
+const { listFields, validateFields } = require('./member-fields.service');
 
 async function edit(userId, body) {
     if (Object.keys(body).some((key) => !['nickname', 'email', 'username'].includes(key)))

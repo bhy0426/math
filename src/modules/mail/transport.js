@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fail } = require('../../shared/helpers');
-const { readSender } = require('../manager/mail-sender.store');
+const { readSender } = require('./sender.store');
 
 // 발신자는 디스크에 암호화하고, 현재 서버에서 마지막으로 확인한 접속 결과만 메모리에 둔다.
 const connections = new WeakMap();

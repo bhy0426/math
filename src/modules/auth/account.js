@@ -1,6 +1,6 @@
 const { User, Role } = require('../../models');
 const { id } = require('../../shared/helpers');
-const { listFields, selectFields } = require('../manager/member-fields.service');
+const { listFields, selectFields } = require('../user/member-fields.service');
 
 function findUser(userId, options = {}) {
     return User.findByPk(id(userId), { include: { model: Role, as: 'roleRecord' }, ...options });

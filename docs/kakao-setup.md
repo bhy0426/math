@@ -2,6 +2,8 @@
 
 공통 동작과 구글 설정은 [소셜 로그인 안내](social-login.md)를 본다.
 
+계정 연결 저장은 `social_accounts`의 `provider=kakao` 행과 공통 `auth/social.repository.js`가 담당한다. 이전 `kakao_accounts`의 앱 해시·카카오 회원번호·MathSite 회원번호·연결 시각은 [소셜 계정 이관](HANDOFF.md#소셜-계정-테이블-이관)으로 옮긴다.
+
 2026-11-08 MathSite 전용 앱과 실제 카카오 로그인 연결을 확인한 기록이 있다. 2026-11-16에는 Sequelize·공통 인증 서비스·비밀번호 복구로 재구성했고 공급자 응답 대체 검사로 확인했다. **이번 변경의 실계정 로그인은 다시 확인하지 않았다.**
 
 카카오 개발자 앱에서 로그인 사용을 활성화하고 REST API 키·활성화된 Client Secret을 서버 `.env`에 입력한다. 공식 복귀 주소는 다음과 정확히 일치시킨다.

@@ -25,7 +25,7 @@ const { resetData } = require('./reset-data');
 const { openMailbox, closeMailbox, registerByEmail, requestCode } = require('./signup-mail');
 const { migrate } = require('../database/migrate');
 const { hlsRoot, resumeConversions, waitForConversions } = require('../src/modules/courses/video');
-const { writeSender } = require('../src/modules/manager/mail-sender.store');
+const { writeSender } = require('../src/modules/mail/sender.store');
 const { client } = require('./http-client');
 const app = require('../src/app');
 let server, base, admin, student, viewer, courseId, studentId, lectureId, mediaUrl;
@@ -446,7 +446,7 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
         };
         try {
             useTestSender();
-            await require('../src/modules/auth/mail').sendReset(
+            await require('../src/modules/mail/transport').sendReset(
                 'student@mathsite.local',
                 'synthetic-reset-token',
             );
@@ -457,7 +457,10 @@ describe('추가 기능과 FFmpeg·Nginx 통합', () => {
             assert.ok(
                 sent.text.includes('https://mathsite.invalid/reset?token=synthetic-reset-token'),
             );
-            await require('../src/modules/auth/mail').sendSignupCode('new@example.test', '012345');
+            await require('../src/modules/mail/transport').sendSignupCode(
+                'new@example.test',
+                '012345',
+            );
             assert.equal(sent.to, 'new@example.test');
             assert.match(sent.subject, /회원가입/);
             assert.match(sent.text, /012345/);

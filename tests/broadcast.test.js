@@ -19,7 +19,7 @@ const {
     Broadcast,
     BroadcastDelivery,
 } = require('../src/models');
-const { writeSender } = require('../src/modules/manager/mail-sender.store');
+const { writeSender } = require('../src/modules/mail/sender.store');
 const { resetData } = require('./reset-data');
 const { client } = require('./http-client');
 const app = require('../src/app');

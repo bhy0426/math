@@ -11,6 +11,8 @@ React + Express + Sequelize + MySQL로 만드는 학원 사이트. 관리자가 
 3. [관리자 화면](client/src/pages/manager/ManagerPage.jsx)에서 회원 관리, 회원 그룹, 가입·로그인 설정, 메일 관리, 메일 발송 탭을 연결한다.
 4. [API 목록](docs/API.md)과 [파일·함수 안내](docs/functions.md)에서 해당 요청의 서버 코드와 Mocha 테스트를 찾는다.
 
+공통 회원 항목 규칙은 `src/modules/user`, 관리자 설정 저장은 `src/modules/manager`, 발신 계정 등록·메일 전송은 `src/modules/mail`에서 읽는다. 카카오·구글 계정 연결은 `social_accounts` 테이블과 `auth/social.repository.js`를 공유한다. 기존 DB를 새 코드로 실행할 때는 [소셜 계정 이관 절차](docs/HANDOFF.md#소셜-계정-테이블-이관)를 따른다.
+
 하연이가 영상 모듈을 연결할 곳은 [영상 입력 폼](client/src/pages/courses/LectureEditor.jsx)과 [재생 컴포넌트](client/src/pages/courses/VideoPlayer.jsx)다. 서버는 [강의 라우터](src/modules/courses/lectures.routes.js)에서 요청을 받아 강좌 소속과 시청 권한을 검사한다.
 
 ## 회원과 발신 메일

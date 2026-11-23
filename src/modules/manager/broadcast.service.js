@@ -2,10 +2,10 @@ const crypto = require('node:crypto');
 const { Validator, UniqueConstraintError } = require('sequelize');
 const { sequelize, Broadcast, BroadcastDelivery } = require('../../models');
 const { fail, id, text } = require('../../shared/helpers');
-const { sendStudentMail, requireMail } = require('../auth/mail');
+const { sendStudentMail, requireMail } = require('../mail/transport');
 const { selectedStudents } = require('./groups.service');
-const { requireEmailFields, selectFields } = require('./member-fields.service');
-const { readSender } = require('./mail-sender.store');
+const { requireEmailFields, selectFields } = require('../user/member-fields.service');
+const { readSender } = require('../mail/sender.store');
 
 // SMTP의 연결·응답 제한(각 10초)보다 길다. 중단된 실행은 영수증에 표시하고 재발송하지 않는다.
 const staleAfter = 2 * 60 * 1000;

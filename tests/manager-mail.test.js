@@ -15,7 +15,7 @@ const { resetData } = require('./reset-data');
 const { sequelize } = require('../src/models');
 const app = require('../src/app');
 const { client } = require('./http-client');
-const { sendSignupCode, sendReset } = require('../src/modules/auth/mail');
+const { sendSignupCode, sendReset } = require('../src/modules/mail/transport');
 
 describe('관리자의 발신 계정 변경', () => {
     const originalTransport = nodemailer.createTransport;

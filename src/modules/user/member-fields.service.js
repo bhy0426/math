@@ -1,10 +1,6 @@
-const { sequelize, MemberField, User, Role, KakaoAccount, GoogleAccount } = require('../../models');
-const { kakaoConfig } = require('../auth/kakao.config');
-const { googleConfig } = require('../auth/google.config');
+const { MemberField, User } = require('../../models');
 const { Op, Validator } = require('sequelize');
 const { fail, text, email, username } = require('../../shared/helpers');
-const { canSendResetEmail } = require('../auth/mail');
-const { cancelVerification } = require('./mail.service');
 
 const definitions = [
     { key: 'username', label: '아이디', validate: username },
@@ -44,44 +40,7 @@ async function ensureFieldDefaults() {
     );
 }
 
-function canRequestResetEmail(fields) {
-    return fields.some((field) => field.key === 'email' && field.enabled) && canSendResetEmail();
-}
-
-async function publicConfiguration() {
-    const fields = (await listFields()).filter((field) => field.enabled);
-    return { fields, canRequestResetEmail: canRequestResetEmail(fields) };
-}
-
-// 한 로그인 항목을 끌 때, 실제 활성 관리자가 남은 항목이나 연결된 소셜 계정으로 돌아올 수 있어야 한다.
-async function checkManagerLogin(remainingKey, transaction) {
-    const admins = await User.findAll({
-        where: { status: 'active' },
-        attributes: ['id', remainingKey],
-        include: { model: Role, as: 'roleRecord', where: { can_manage: true }, attributes: [] },
-        transaction,
-        lock: transaction.LOCK.UPDATE,
-    });
-    if (admins.some((admin) => admin[remainingKey])) return;
-    const userIds = admins.map((admin) => admin.id);
-    for (const [model, appKey, config] of [
-        [KakaoAccount, 'app_key_hash', kakaoConfig()],
-        [GoogleAccount, 'client_id_hash', googleConfig()],
-    ]) {
-        if (
-            config.configured &&
-            (await model.count({
-                where: { user_id: { [Op.in]: userIds }, [appKey]: config.appKeyHash },
-                transaction,
-            }))
-        )
-            return;
-    }
-    const label = remainingKey === 'username' ? '아이디' : '이메일';
-    fail(409, `활성 관리자에게 ${label} 값을 등록하거나 소셜 계정을 연결한 뒤 설정을 저장하세요.`);
-}
-
-async function editFields(body) {
+function validateFieldSettings(body) {
     if (!Array.isArray(body.fields) || body.fields.length !== definitions.length)
         fail(400, '아이디·닉네임·이메일 설정을 모두 보내세요.');
     const keys = new Set();
@@ -103,30 +62,7 @@ async function editFields(body) {
         label,
         enabled: body.fields.find((field) => field.key === key).enabled,
     }));
-    // 한 번의 저장으로 세 스위치를 함께 반영한다. 회원 데이터는 건드리지 않는다.
-    await sequelize.transaction(async (transaction) => {
-        const current = await listFields({ transaction, lock: transaction.LOCK.UPDATE });
-        const loginOptions = fields.filter((field) => field.enabled && field.key !== 'nickname');
-        if (
-            loginOptions.length === 1 &&
-            current.some(
-                (field) =>
-                    field.enabled && field.key !== 'nickname' && field.key !== loginOptions[0].key,
-            )
-        )
-            await checkManagerLogin(loginOptions[0].key, transaction);
-        await MemberField.bulkCreate(fields, {
-            fields: ['key', 'enabled'],
-            updateOnDuplicate: ['enabled'],
-            transaction,
-        });
-    });
-    if (!fields.find((field) => field.key === 'email').enabled) cancelVerification();
-    return {
-        message: '회원 항목 설정 저장 완료',
-        fields,
-        canRequestResetEmail: canRequestResetEmail(fields),
-    };
+    return fields;
 }
 
 async function validateFields(body, { partial = false, currentUser, fields, transaction } = {}) {
@@ -161,8 +97,7 @@ module.exports = {
     ensureFieldDefaults,
     listFields,
     requireEmailFields,
-    publicConfiguration,
-    editFields,
+    validateFieldSettings,
     validateFields,
     selectFields,
 };

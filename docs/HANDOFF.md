@@ -33,15 +33,22 @@ src/models.js                      Sequelize 테이블·열·관계 매핑
 src/database.js                    MySQL 연결과 연결 풀
 src/modules/기능명/routes.js       요청 값 전달·HTTP 응답
 src/modules/기능명/service.js      입력 검사·권한·처리·모델 호출
+src/modules/user/member-fields.service.js  가입·회원 수정·응답의 공통 항목 규칙
+src/modules/manager/member-settings.service.js  관리자 설정 저장·재로그인 보호
+src/modules/mail                  발신자 등록·암호화 저장·공통 메일 전송
+src/modules/auth/social.repository.js  공급자별 계정 연결의 공통 저장 함수
 database/migrate.js                기존 DB를 모델 구조에 맞게 준비
+database/migrate-social-accounts.js  구형 소셜 계정 백업·통합·검증
 client/src/pages                   화면
 client/src/shared                  공통 로그인 상태·입력·요청
 tests                              Mocha와 합성 자료
 ```
 
-예를 들어 회원정보를 수정할 때 `manager/routes.js`는 `service.editUser`를 호출하고 응답한다. 실제 처리 함수는 **같은 manager 폴더**의 `service.js`에 있다. 본인 수정과 공유할 처리는 user/service로 위임하고, 공통 항목 정책은 manager/member-fields.service에 둔다.
+예를 들어 회원정보를 수정할 때 `manager/routes.js`는 `service.editUser`를 호출하고 응답한다. 실제 처리 함수는 **같은 manager 폴더**의 `service.js`에 있다. 본인 수정과 공유할 처리는 user/service로 위임하고, 공통 항목 정책은 user/member-fields.service에 둔다. 관리자 설정 저장과 재로그인 보호는 manager/member-settings.service에서 조합한다.
 
 강의도 courses 폴더 안의 `lectures.routes.js`와 `lectures.service.js`로 구분한다. 업로드는 `upload.js`, 변환 작업은 `video.js`, 시청 검사는 `access.js`다. 라우터 파일에 DB·파일·암호 계산 코드를 다시 넣지 않는다.
+
+메일의 `routes.js`는 관리자 라우터의 `/mail`에 연결되어 `/api/manager/mail` 요청을 처리한다. 등록은 `mail/sender.service.js`, 암호화 보관은 `mail/sender.store.js`, SMTP와 공통 발송 함수는 `mail/transport.js`에 있다. 가입·비밀번호 초기화·학생 안내가 같은 전송 함수를 쓴다. 인증 서비스의 `publicConfiguration`은 공통 회원 정책과 메일 준비 상태를 합쳐 화면에 반환한다.
 
 ## 4. 실행과 새 PC 설정
 
@@ -87,6 +94,34 @@ await user.update({ nickname: nextNickname });
 열을 추가할 때는 모델과 `database/migrate.js`의 QueryInterface 처리를 함께 수정한다. `sync()`는 없는 테이블·인덱스를 준비하지만 기존 열 변경을 모두 알아서 처리하지 않는다. `force:true`나 `alter:true`로 공유 DB를 재구성하지 않는다. 현재 마이그레이션은 열 존재 확인, 필요한 NULL 허용 변경, 중복 검사, 모델 동기화를 수행한다.
 
 그룹 이름은 `student_groups`, 학생과 그룹의 연결은 `group_members`에 저장한다. 학생 안내 메일의 요청자·요청 식별 정보는 `mail_broadcasts`, 학생별 발송 상태는 `mail_broadcast_deliveries`에 저장한다. 전체 테이블과 관계는 [모델 파일](../src/models.js)에서 확인한다. signup_codes에는 가입 전 인증 정보가 임시로 들어간다. 과거 `site_settings` 테이블이 DB에 남아 있어도 조회하지 않는다. 자료 보존을 위해 자동 삭제하지 않았다.
+
+### 소셜 계정 테이블 이관
+
+2026-11-23 공유 DB에 적용했다. 기존 회원 9명과 카카오 연결 2건을 보존했고, 나머지 15개 테이블의 모든 행을 이관 전 백업과 대조했다. 기존 구글 연결 행은 없었다. 전체 Mocha 94개와 두 DB 연결을 사용하는 동시 이관 검사, 빌드·서식 검사, 재시작 후 공개 API 응답을 확인했다. 외부 카카오·구글의 새 인증 화면을 이용한 실계정 로그인은 이번 검사에 포함하지 않았다.
+
+전체 DB 백업과 소셜 연결 원본은 이 PC의 `.local/backups`에 보관하며 검증 기록은 `social-migration-verification.json`이다. 공유 DB를 사용하는 다른 PC에도 이 수정본을 적용해야 한다.
+
+현재 모델의 활성 테이블은 15개다. 회원·인증, 회원 그룹, 강좌·시청 권한, 게시판, 메일 발송으로 묶은 [데이터 관계도](code-map.md#데이터-관계)를 먼저 본다. `kakao_accounts`와 `google_accounts`의 연결 정보는 `social_accounts` 하나로 옮긴다.
+
+| 열                 | 저장하는 정보                                                      |
+| ------------------ | ------------------------------------------------------------------ |
+| `provider`         | `kakao` 또는 `google`                                              |
+| `app_key_hash`     | 연결할 앱·클라이언트의 식별 해시                                   |
+| `provider_user_id` | 공급자가 발급한 계정 식별자                                        |
+| `user_id`          | 기존 MathSite 회원 번호                                            |
+| `user_scope`       | 회원별 중복 연결을 검사할 범위. 카카오는 앱 해시, 구글은 빈 문자열 |
+| `created_at`       | 기존 계정을 연결한 시각                                            |
+
+공급자·앱·외부 계정 조합은 하나의 회원에게 연결된다. 카카오는 앱마다 회원당 한 계정, 구글은 회원당 한 계정이라는 기존 제약을 `provider`, `user_scope`, `user_id`의 고유 인덱스로 유지한다.
+
+이관할 때 공유 DB를 사용하는 구버전 서버를 종료하고 새 코드로 실행한다. `npm run db:init`과 서버 시작의 `initialize`가 다음 절차를 호출한다. [소셜 계정 이관 코드](../database/migrate-social-accounts.js)
+
+1. 구형 테이블을 `_migration_kakao_accounts`, `_migration_google_accounts`로 바꾸어 복사 중 구버전 코드의 쓰기를 차단한다.
+2. 테이블 구조와 연결 행을 `.local/backups/social-accounts-*.json`에 저장하고 저장 내용이 일치하는지 확인한다.
+3. 트랜잭션 안에서 계정 식별자·회원 번호·연결 시각을 새 테이블에 복사한다. 이미 복사된 행은 모든 값이 일치하는지 확인하고, 다른 회원을 가리키면 이관을 중단한다.
+4. 새 연결의 검증·커밋이 끝난 원본 임시 테이블을 정리한다. 중간에 중단되면 남아 있는 임시 테이블에서 다음 실행이 이어진다.
+
+백업에는 계정 연결 정보가 들어 있으므로 서버의 비공개 `.local`에 보관한다. `.local`과 환경 설정은 Git·공유 ZIP 제외 대상이다. 원본 이름의 구형 테이블과 이관용 임시 테이블이 함께 발견되면 구버전 실행 여부를 확인한 뒤 다시 진행한다. 기존 `site_settings` 같은 다른 과거 테이블은 이 이관의 대상에 포함되지 않는다.
 
 ## 7. 회원 항목 스위치
 
@@ -228,7 +263,7 @@ npm.cmd run db:stop
 | 관리자·학생의 강좌 화면 | [공용 강좌 페이지](../client/src/pages/courses/CoursesPage.jsx) → [강좌 라우터](../src/modules/courses/routes.js) → [강좌 서비스](../src/modules/courses/service.js) | 같은 주소에서 관리자에게 편집 버튼이 보이고, 학생의 직접 수정 요청은 서버가 거절한다.                                                                                            |
 | 강의 업로드·재생        | [강의 서비스](../src/modules/courses/lectures.service.js) → [변환 작업](../src/modules/courses/video.js)                                                             | 다른 PC의 원본이 없는 상태에서 서버를 켜도 변환 상태가 유지되는지, 잘못된 교체 요청 후 기존 영상이 재생되는지 확인한다.                                                          |
 | 반 편성·일괄 권한·메일  | [그룹 서비스](../src/modules/manager/groups.service.js) → [학생 안내 메일 서비스](../src/modules/manager/broadcast.service.js)                                       | 같은 반에서 학생 한 명을 제외한 뒤 그 학생의 기존 권한과 실제 수신 대상을 확인한다. 두 화면은 [학생 선택 컴포넌트](../client/src/pages/manager/StudentChecklist.jsx)를 공유한다. |
-| 가입·로그인 항목        | [회원 항목 서비스](../src/modules/manager/member-fields.service.js) → [로그인 서비스](../src/modules/auth/service.js)                                                | 이메일을 끈 경우와 다시 켠 경우에 가입·회원정보·재로그인·관리자 메일 화면이 같은 설정을 따르는지 확인한다.                                                                       |
+| 가입·로그인 항목        | [회원 항목 서비스](../src/modules/user/member-fields.service.js) → [로그인 서비스](../src/modules/auth/service.js)                                                   | 이메일을 끈 경우와 다시 켠 경우에 가입·회원정보·재로그인·관리자 메일 화면이 같은 설정을 따르는지 확인한다.                                                                       |
 
 강좌·강의·Q&A·공지의 요청 파일은 권한 미들웨어를 연결하고 HTTP 요청·응답을 처리한다. 입력 검증과 데이터 변경은 해당 모듈의 서비스에 모여 있다. 그룹의 소속 학생 판정을 시청 권한과 메일 발송이 공유하므로, 학생 선정 기준을 바꾸면 두 기능의 테스트를 함께 실행한다. 가입·프로필·관리자 수정도 동일한 회원 항목 규칙을 따르므로 필드를 추가할 때 세 화면과 로그인 테스트를 함께 본다.
 

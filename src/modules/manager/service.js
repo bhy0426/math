@@ -2,7 +2,7 @@ const { Op } = require('sequelize');
 const { sequelize, User, Role } = require('../../models');
 const { id, fail } = require('../../shared/helpers');
 const { findUser, publicUser } = require('../auth/account');
-const { listFields } = require('./member-fields.service');
+const { listFields } = require('../user/member-fields.service');
 const profile = require('../user/service');
 const { getRole } = require('./roles.service');
 
