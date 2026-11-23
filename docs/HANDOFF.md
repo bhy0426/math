@@ -29,7 +29,9 @@
 
 ```text
 src/app.js                         전체 API 주소 연결·세션·오류 응답
-src/models.js                      Sequelize 테이블·열·관계 매핑
+src/models/index.js                전체 모델 등록·관계 연결·내보내기
+src/models/각-모델.js              테이블별 열·옵션·관계 매핑
+src/models/attributes.js           기본키·필수값·생성 시각의 공통 열 정의
 src/database.js                    MySQL 연결과 연결 풀
 src/modules/기능명/routes.js       요청 값 전달·HTTP 응답
 src/modules/기능명/service.js      입력 검사·권한·처리·모델 호출
@@ -78,7 +80,13 @@ npm.cmd run dev
 
 ## 6. Sequelize로 DB 수정하기
 
-`models.js`가 테이블 매핑의 기준이다. 직접 SQL 파일과 query/execute 호출은 제거했다. `mysql2`는 Sequelize의 MySQL 드라이버로만 사용한다.
+`src/models/`의 모델별 파일이 테이블 매핑의 기준이다. [모델 파일 대응표](code-map.md#모델-폴더-읽기)에서 수정할 테이블을 찾는다. 직접 SQL 파일과 query/execute 호출은 제거했다. `mysql2`는 Sequelize의 MySQL 드라이버로만 사용한다.
+
+각 모델은 `Sequelize.Model`을 상속한다. `static init(sequelize)`에서 열·옵션을, `static associate(db)`에서 다른 모델과의 관계를 정의한다. [index.js](../src/models/index.js)가 기존 [database.js](../src/database.js)의 연결로 모든 모델의 `init`을 실행한 다음 `associate`를 호출한다. 관계 설정은 전달받은 `db`의 모델을 사용하고, 모델끼리 직접 불러오지 않는다. 공통 열 정의는 [attributes.js](../src/models/attributes.js)에 둔다.
+
+서비스의 `require('../../models')`는 `src/models/index.js`를 읽어 같은 모델을 가져온다. 모델 클래스를 직접 불러와 새 연결을 만들거나 서비스에서 다시 `init`하지 않는다. `init`은 실행 중인 프로그램에 모델을 등록하며, 실제 DB 준비는 아래의 `migrate`와 `sync()`가 맡는다.
+
+클래스 이름은 `User`, `Course`처럼 쓰되 Sequelize의 `modelName`은 기존 소문자 이름(`users`, `courses` 등)을 유지한다. `sequelize.models`의 키와 기존 조회 관계 이름의 호환성을 위한 것이다. `tableName`·열의 `field`·인덱스·외래키·관계의 `as`도 기존 매핑을 유지하므로 파일 분리만으로 테이블이나 회원 데이터를 바꾸지 않는다.
 
 ```javascript
 // 조회: 조건과 반환 관계를 객체로 전달한다.
@@ -87,13 +95,13 @@ const user = await User.findByPk(userId);
 await user.update({ nickname: nextNickname });
 ```
 
-모델의 `User.nickname`은 기존 DB의 `name` 열에 `field: 'name'`으로 매핑된다. 화면과 API는 nickname을 쓴다. 기존 자료를 보존하기 위한 매핑이며 역할의 `Role.name`이나 강사 이름과는 다르다.
+[회원 모델](../src/models/user.js)의 `User.nickname`은 기존 DB의 `name` 열에 `field: 'name'`으로 매핑된다. 화면과 API는 nickname을 쓴다. 기존 자료를 보존하기 위한 매핑이며 역할의 `Role.name`이나 강사 이름과는 다르다.
 
 닉네임·아이디·이메일은 각각 고유하다. 꺼 둔 항목을 받지 않고 가입할 수 있도록 세 열은 NULL을 허용한다. NULL이 여러 개 있는 것은 중복 닉네임 사용과 다르다.
 
 열을 추가할 때는 모델과 `database/migrate.js`의 QueryInterface 처리를 함께 수정한다. `sync()`는 없는 테이블·인덱스를 준비하지만 기존 열 변경을 모두 알아서 처리하지 않는다. `force:true`나 `alter:true`로 공유 DB를 재구성하지 않는다. 현재 마이그레이션은 열 존재 확인, 필요한 NULL 허용 변경, 중복 검사, 모델 동기화를 수행한다.
 
-그룹 이름은 `student_groups`, 학생과 그룹의 연결은 `group_members`에 저장한다. 학생 안내 메일의 요청자·요청 식별 정보는 `mail_broadcasts`, 학생별 발송 상태는 `mail_broadcast_deliveries`에 저장한다. 전체 테이블과 관계는 [모델 파일](../src/models.js)에서 확인한다. signup_codes에는 가입 전 인증 정보가 임시로 들어간다. 과거 `site_settings` 테이블이 DB에 남아 있어도 조회하지 않는다. 자료 보존을 위해 자동 삭제하지 않았다.
+그룹 이름은 `student_groups`, 학생과 그룹의 연결은 `group_members`에 저장한다. 학생 안내 메일의 요청자·요청 식별 정보는 `mail_broadcasts`, 학생별 발송 상태는 `mail_broadcast_deliveries`에 저장한다. 전체 모델 등록 목록은 [모델 진입점](../src/models/index.js), 관계는 [데이터 관계도](code-map.md#데이터-관계)와 각 모델의 `associate`에서 확인한다. signup_codes에는 가입 전 인증 정보가 임시로 들어간다. 과거 `site_settings` 테이블이 DB에 남아 있어도 조회하지 않는다. 자료 보존을 위해 자동 삭제하지 않았다.
 
 ### 소셜 계정 테이블 이관
 
@@ -267,7 +275,7 @@ npm.cmd run db:stop
 
 강좌·강의·Q&A·공지의 요청 파일은 권한 미들웨어를 연결하고 HTTP 요청·응답을 처리한다. 입력 검증과 데이터 변경은 해당 모듈의 서비스에 모여 있다. 그룹의 소속 학생 판정을 시청 권한과 메일 발송이 공유하므로, 학생 선정 기준을 바꾸면 두 기능의 테스트를 함께 실행한다. 가입·프로필·관리자 수정도 동일한 회원 항목 규칙을 따르므로 필드를 추가할 때 세 화면과 로그인 테스트를 함께 본다.
 
-관리자 화면에서 회원을 승인하거나 회원의 역할을 배정할 때는 [회원 서비스](../src/modules/manager/service.js)를, 역할 자체를 추가하거나 이름을 바꿀 때는 [역할 서비스](../src/modules/manager/roles.service.js)를 연다. 한 학생과 반 전체에 시청 권한을 줄 때는 같은 [기간 검사](../src/modules/courses/access.js)의 `accessPeriod`와 [권한 저장 함수](../src/modules/manager/lecture-access.service.js)의 `saveLectureGrants`를 사용한다. [Sequelize 모델](../src/models.js)의 열 이름이나 관계를 바꿀 때는 해당 모델의 서비스와 [기존 DB 마이그레이션](../database/migrate.js)도 함께 살펴본다.
+관리자 화면에서 회원을 승인하거나 회원의 역할을 배정할 때는 [회원 서비스](../src/modules/manager/service.js)를, 역할 자체를 추가하거나 이름을 바꿀 때는 [역할 서비스](../src/modules/manager/roles.service.js)를 연다. 한 학생과 반 전체에 시청 권한을 줄 때는 같은 [기간 검사](../src/modules/courses/access.js)의 `accessPeriod`와 [권한 저장 함수](../src/modules/manager/lecture-access.service.js)의 `saveLectureGrants`를 사용한다. [모델 파일](code-map.md#모델-폴더-읽기)의 열 이름이나 관계를 바꿀 때는 해당 모델의 서비스와 [기존 DB 마이그레이션](../database/migrate.js)도 함께 살펴본다.
 
 아이디 또는 이메일 로그인을 끄는 설정은 남은 항목에 값이 있거나 현재 앱의 소셜 계정이 연결된 활성 관리자가 있는지 확인한다. 모두 재로그인할 수 없는 설정은 409로 거절한다. 이 경우 설정을 유지한 채 관리자 프로필에 남겨 둘 아이디·이메일을 먼저 등록하거나 사용할 소셜 계정을 연결한다.
 

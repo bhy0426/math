@@ -4,7 +4,9 @@ React + Express + Sequelize + MySQL로 만드는 학원 사이트. 관리자가 
 
 ## 코드를 처음 볼 때
 
-공지 하나가 DB에 저장되는 과정을 먼저 따라가면 다른 기능도 같은 방식으로 읽을 수 있다. [공지 화면](client/src/pages/BoardsPage.jsx)에서 저장을 누르면 `POST /api/boards`로 요청한다. [공지 라우터](src/modules/boards/routes.js)가 관리자 권한을 확인하고 `service.create`에 요청 값을 넘긴다. [공지 서비스](src/modules/boards/service.js)는 제목과 내용을 검사하고, [Sequelize 모델](src/models.js)의 `Board.create`로 저장한다. [핵심 API 테스트](tests/api.test.js)에서 관리자와 학생의 결과를 비교할 수 있다.
+공지 하나가 DB에 저장되는 과정을 먼저 따라가면 다른 기능도 같은 방식으로 읽을 수 있다. [공지 화면](client/src/pages/BoardsPage.jsx)에서 저장을 누르면 `POST /api/boards`로 요청한다. [공지 라우터](src/modules/boards/routes.js)가 관리자 권한을 확인하고 `service.create`에 요청 값을 넘긴다. [공지 서비스](src/modules/boards/service.js)는 제목과 내용을 검사하고, [공지 모델](src/models/board.js)의 `Board.create`로 저장한다. [핵심 API 테스트](tests/api.test.js)에서 관리자와 학생의 결과를 비교할 수 있다.
+
+DB 모델은 `src/models/` 안에서 테이블마다 파일 하나로 나뉜다. [회원 모델](src/models/user.js)의 `init`에서 열을, `associate`에서 다른 모델과의 관계를 읽는다. [모델 진입점](src/models/index.js)은 기존 DB 연결을 받아 전체 모델을 등록한 다음 관계를 연결한다. 전체 파일과 테이블의 대응은 [모델 구조 지도](docs/code-map.md#모델-폴더-읽기)에 있다.
 
 1. [화면과 API 구조 지도](docs/code-map.md)에서 수정할 기능을 고른다. 화면은 `client/src`, 서버는 `src`에 있다.
 2. [강좌 페이지](client/src/pages/courses/CoursesPage.jsx)에서 학생과 원장님이 같은 강좌를 여는 흐름을 본다. 원장님이 편집 모드를 켜면 강좌와 영상 편집 도구가 나타난다.

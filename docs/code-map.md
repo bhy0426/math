@@ -13,7 +13,10 @@ src/app.js                       /api 주소 → Express 라우터
   modules/mail/                  발신자 등록 · 암호화 보관 · 공통 메일 전송
   modules/courses/               강좌 · 하위 강의 · 시청 권한 · 업로드
   modules/boards/ · info/        공지 · Q&A
-src/models.js → src/database.js   Sequelize 모델 → MySQL
+src/models/                     테이블별 Sequelize 모델·관계
+  index.js                      전체 모델 등록 → 관계 연결 → 내보내기
+  attributes.js                 공통 열 정의
+src/database.js                 MySQL 연결과 연결 풀
 tests/                           기능별 Mocha 테스트
 ```
 
@@ -33,9 +36,35 @@ tests/                           기능별 Mocha 테스트
 
 ## 처음 따라갈 요청 하나
 
-**강좌 이름 수정**을 예로 든다. 원장님이 학생과 같은 강좌 상세에서 편집 모드를 켠다. `CourseEditor`에서 저장을 누르면 [공통 HTTP 함수](../client/src/shared/api.js)가 `PATCH /api/courses/:courseId`를 호출한다. 강좌 라우터는 [관리자 검사](../src/shared/helpers.js)를 거쳐 서비스에 요청값을 전달한다. 서비스가 [Course 모델](../src/models.js)로 저장하고 화면이 새 값을 읽는다. 학생에게는 편집 UI가 숨겨지며 같은 변경 API에도 권한 검사가 적용된다.
+**강좌 이름 수정**을 예로 든다. 원장님이 학생과 같은 강좌 상세에서 편집 모드를 켠다. `CourseEditor`에서 저장을 누르면 [공통 HTTP 함수](../client/src/shared/api.js)가 `PATCH /api/courses/:courseId`를 호출한다. 강좌 라우터는 [관리자 검사](../src/shared/helpers.js)를 거쳐 서비스에 요청값을 전달한다. 서비스가 [Course 모델](../src/models/course.js)로 저장하고 화면이 새 값을 읽는다. 학생에게는 편집 UI가 숨겨지며 같은 변경 API에도 권한 검사가 적용된다.
 
 하연이가 플레이어를 바꿀 때 [VideoPlayer.jsx](../client/src/pages/courses/VideoPlayer.jsx)의 `src`, `format`, `onError` 입력을 유지하면 나머지 화면에서 같은 방식으로 재생할 수 있다. 영상 공급자를 바꿀 때에도 학생에게 재생 주소를 발급하는 API의 시청 권한 검사를 유지한다.
+
+## 모델 폴더 읽기
+
+`src/models/index.js`를 먼저 보고 수정할 테이블의 파일로 이동한다. 각 파일은 `Sequelize.Model`을 상속한 클래스 하나를 내보낸다. `static init(sequelize)`는 열·테이블 이름·인덱스를 등록하고, 관계가 있는 모델의 `static associate(db)`는 외래키와 조회 관계를 연결한다.
+
+| 모델 파일                                                    | 클래스              | DB 테이블                   |
+| ------------------------------------------------------------ | ------------------- | --------------------------- |
+| [user.js](../src/models/user.js)                             | `User`              | `users`                     |
+| [role.js](../src/models/role.js)                             | `Role`              | `roles`                     |
+| [social-account.js](../src/models/social-account.js)         | `SocialAccount`     | `social_accounts`           |
+| [member-field.js](../src/models/member-field.js)             | `MemberField`       | `member_fields`             |
+| [group.js](../src/models/group.js)                           | `Group`             | `student_groups`            |
+| [group-member.js](../src/models/group-member.js)             | `GroupMember`       | `group_members`             |
+| [course.js](../src/models/course.js)                         | `Course`            | `courses`                   |
+| [lecture.js](../src/models/lecture.js)                       | `Lecture`           | `lectures`                  |
+| [lecture-access.js](../src/models/lecture-access.js)         | `LectureAccess`     | `lecture_access`            |
+| [board.js](../src/models/board.js)                           | `Board`             | `boards`                    |
+| [question.js](../src/models/question.js)                     | `Question`          | `questions`                 |
+| [password-reset.js](../src/models/password-reset.js)         | `PasswordReset`     | `password_resets`           |
+| [signup-code.js](../src/models/signup-code.js)               | `SignupCode`        | `signup_codes`              |
+| [broadcast.js](../src/models/broadcast.js)                   | `Broadcast`         | `mail_broadcasts`           |
+| [broadcast-delivery.js](../src/models/broadcast-delivery.js) | `BroadcastDelivery` | `mail_broadcast_deliveries` |
+
+[index.js](../src/models/index.js)는 [database.js](../src/database.js)의 연결을 공유하고, **모든 모델의 `init`을 마친 뒤 `associate`를 호출**한다. 모델끼리 직접 `require`하지 않고 전달받은 `db.User`, `db.Course` 등으로 관계를 연결하므로 서로 불러오는 순서에 의존하지 않는다. [attributes.js](../src/models/attributes.js)는 여러 모델이 쓰는 기본키·필수값·생성 시각의 열 정의를 모은다.
+
+서비스의 `require('../../models')`는 이 폴더의 `index.js`를 읽는다. 따라서 서비스에서 쓰는 `User.findByPk`, `Course.create` 등의 호출은 그대로 유지된다. 실제 테이블 준비는 [마이그레이션](../database/migrate.js)이 담당하며 `init`은 DB에 테이블을 만드는 작업이 아니다.
 
 ## 데이터 관계
 

@@ -6,7 +6,7 @@
 
 1. 브라우저가 열 경로를 `App`에서 찾는다. `RequireUser`는 로그인이 필요한 화면을 감싸고, `AuthProvider`는 현재 사용자와 활성 회원 항목을 화면에 전달한다. [화면 진입점](../client/src/main.jsx) · [화면 경로](../client/src/App.jsx) · [로그인 상태](../client/src/shared/auth.jsx)
 2. 화면에서 `api(method, path, body)`를 호출하면 공통 함수가 `/api`를 붙여 요청한다. `useResource`는 조회와 새로고침, `useAction`은 버튼 작업의 진행·결과를 맡는다. [요청 함수](../client/src/shared/api.js) · [조회·저장 상태](../client/src/shared/hooks.js)
-3. Express가 주소를 기능별 라우터에 연결한다. `currentUser`는 세션에서 회원을 찾고 `requireLogin`, `requireAdmin`은 실제 API 접근을 검사한다. 각 라우터가 같은 폴더의 서비스 함수에 값을 넘기고, 서비스가 Sequelize 모델로 데이터를 읽거나 저장한다. [API 연결](../src/app.js) · [세션 확인](../src/middleware/session-user.js) · [공통 권한·입력 검사](../src/shared/helpers.js) · [DB 모델](../src/models.js)
+3. Express가 주소를 기능별 라우터에 연결한다. `currentUser`는 세션에서 회원을 찾고 `requireLogin`, `requireAdmin`은 실제 API 접근을 검사한다. 각 라우터가 같은 폴더의 서비스 함수에 값을 넘기고, 서비스가 Sequelize 모델로 데이터를 읽거나 저장한다. [API 연결](../src/app.js) · [세션 확인](../src/middleware/session-user.js) · [공통 권한·입력 검사](../src/shared/helpers.js) · [DB 모델 모음](../src/models/index.js)
 
 ## 가입·로그인·내 정보
 
@@ -61,6 +61,18 @@
 - `Layout`은 메뉴, `Page`는 페이지 제목과 상태, `Field`·`Form`·`DeleteButton`은 여러 화면의 입력과 삭제 확인에 쓰인다. `memberLabel`은 활성 회원 항목 중 어떤 값을 이름으로 표시할지 정한다. [공통 화면 부품](../client/src/shared/components.jsx) · [회원 표시 이름](../client/src/shared/memberLabel.mjs)
 - `start`가 서버를 시작하고 `configureFrontend`가 React 화면을 연결한다. `isConnectionLimit`은 동시 DB 연결 한도를 판별하고 `status`는 DB 상태를 점검한다. [서버 시작](../src/server.js) · [화면 제공](../src/frontend.js) · [DB 연결](../src/database.js) · [상태 점검](../src/health.js)
 - `initialize`가 기본 역할·회원 항목을 준비하고 `db:init`의 `createInitialAdmin`이 빈 DB의 최초 관리자를 만든다. `migrate`는 기존 DB 구조를 모델에 맞춘다. `migrateSocialAccounts`는 구형 소셜 연결을 백업하고 `social_accounts`에 복사·검증한 뒤 이관 원본을 정리한다. 전용 로컬 MySQL과 Nginx 실행은 각각의 스크립트에서 확인한다. [DB 초기화](../scripts/init-db.js) · [스키마 변경](../database/migrate.js) · [소셜 계정 이관](../database/migrate-social-accounts.js) · [로컬 DB](../scripts/local-db.js) · [미디어 서버](../scripts/nginx.js)
+
+## 모델 파일의 함수 읽기
+
+모델 하나의 열을 바꾸려면 [모델 파일과 테이블 대응표](code-map.md#모델-폴더-읽기)에서 해당 파일을 찾는다. 예를 들어 회원 속성은 [user.js](../src/models/user.js), 강좌 속성은 [course.js](../src/models/course.js)를 연다. API에서 하는 업무 처리 함수는 기존처럼 `modules/기능명/service.js`에 둔다.
+
+| 읽을 부분                                    | 하는 일                                                                                                | 파일                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `static init(sequelize)`                     | 전달받은 연결에 해당 모델의 열·옵션·인덱스를 등록한다. 클래스의 `super.init`이 Sequelize 등록 함수다.  | 각 모델 파일                                                               |
+| `static associate(db)`                       | 등록된 다른 모델을 받아 `belongsTo`·`hasMany` 등 관계를 정의한다. 관계가 있는 모델에 둔다.             | 예: [user.js](../src/models/user.js), [course.js](../src/models/course.js) |
+| 전체 등록과 내보내기                         | 기존 연결을 가져와 모든 `init`을 실행한 다음 관계를 연결하고, 서비스가 사용할 클래스들을 내보낸다.     | [index.js](../src/models/index.js)                                         |
+| `primaryId()`·`required(type)`·`createdAt()` | 공통 열 설정을 새 객체로 만들어 모델들이 함께 쓴다. 각 모델이 별도 열 설정 객체를 받는다.              | [attributes.js](../src/models/attributes.js)                               |
+| `migrate()`·`sync()`                         | 이미 등록된 모델을 기준으로 실제 DB의 테이블·열·인덱스를 준비한다. 모델의 `init`과 실행 목적이 다르다. | [database/migrate.js](../database/migrate.js)                              |
 
 ## Mocha 테스트를 찾는 법
 
