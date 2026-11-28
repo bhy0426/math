@@ -32,7 +32,7 @@ export default function BoardsPage() {
         return action.run(() => api('DELETE', boardPath), reset);
     }
     return (
-        <Page title="공지사항" message={action.message || list.error || detail.error}>
+        <Page title="공지사항" slug="boards" message={action.message || list.error || detail.error}>
             <ul>
                 {list.data?.boards.map((board) => (
                     <li key={board.id}>

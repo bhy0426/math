@@ -51,6 +51,40 @@ video {
 .content {
     white-space: pre-wrap;
 }
+/* WordPress에 로그인한 편집자에게만 보이는 관리자 바 */
+.wp-admin-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    align-items: center;
+    margin: -24px -16px 16px;
+    padding: 6px 16px;
+    background: #1d2327;
+    color: #f0f0f1;
+    font-size: 13px;
+}
+.wp-admin-bar a {
+    color: #f0f0f1;
+    text-decoration: none;
+}
+.wp-admin-bar a:hover {
+    color: #72aee6;
+}
+.wp-admin-bar__user {
+    margin-left: auto;
+}
+
+/* WordPress 관리자에서 편집한 페이지 본문 */
+.wp-content img {
+    max-width: 100%;
+    height: auto;
+}
+.wp-content :first-child {
+    margin-top: 0;
+}
 [hidden] {
     display: none !important;
 }

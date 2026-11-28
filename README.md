@@ -37,7 +37,7 @@ npm.cmd run db:init
 npm.cmd run dev
 ```
 
-기본 주소는 `http://127.0.0.1:3000/`. `npm.cmd start`는 React를 빌드한 뒤 실행한다. 서버 시작 때 필요한 테이블을 확인·준비한다. 중복 회원을 삭제하거나 자동으로 이름을 바꾸는 초기화 코드는 없다.
+기본 주소는 `http://127.0.0.1:3000/`. 메인·학원 소개 같은 화면 문구를 WordPress 관리자에서 편집하는 구성은 Local 사이트 `mathsite`와 함께 `http://mathsite.local`로 접속한다. [WordPress로 화면 내용 관리하기](docs/wordpress.md) `npm.cmd start`는 React를 빌드한 뒤 실행한다. 서버 시작 때 필요한 테이블을 확인·준비한다. 중복 회원을 삭제하거나 자동으로 이름을 바꾸는 초기화 코드는 없다.
 
 ## 검사
 

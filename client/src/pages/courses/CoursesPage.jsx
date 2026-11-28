@@ -42,7 +42,7 @@ function CourseList({ editing, editToggle }) {
     const [search, setSearch] = useState('');
     const courses = useResource('/courses?q=' + encodeURIComponent(search));
     return (
-        <Page title="강좌 목록" message={courses.error}>
+        <Page title="강좌 목록" slug="courses" message={courses.error}>
             {editToggle}
             {editing && <CourseEditor />}
             <SearchForm label="강좌 검색" onSearch={setSearch} />

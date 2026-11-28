@@ -43,7 +43,12 @@ async function configureFrontend(server, development) {
     const { createServer } = await import('vite');
     vite = await createServer({
         configFile: path.resolve(__dirname, '../vite.config.mjs'),
-        server: { middlewareMode: true, hmr: { server } },
+        // 화면은 mathsite.local(nginx)로 열지만, Local 앱의 공용 라우터가 WebSocket을 넘기지 않으므로
+        // 자동 새로고침 연결만 Express(127.0.0.1:PORT)에 직접 붙인다.
+        server: {
+            middlewareMode: true,
+            hmr: { server, host: '127.0.0.1', clientPort: Number(process.env.PORT) || 3000 },
+        },
         appType: 'custom',
     });
     server.on('close', () => vite.close());

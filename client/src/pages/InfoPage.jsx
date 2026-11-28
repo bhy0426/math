@@ -8,8 +8,11 @@ import { DeleteButton, Field, Form, Page } from '../shared/components';
 export default function InfoPage() {
     const { user } = useAuth();
     return (
-        <Page title="학원 소개 · Q&A">
-            <p>MathSite는 강좌와 강의 영상을 제공하는 수학 학원 사이트입니다.</p>
+        <Page
+            title="학원 소개 · Q&A"
+            slug="info"
+            fallback={<p>MathSite는 강좌와 강의 영상을 제공하는 수학 학원 사이트입니다.</p>}
+        >
             <h3>Q&A</h3>
             {user ? (
                 <Questions user={user} />

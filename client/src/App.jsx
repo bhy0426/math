@@ -18,14 +18,22 @@ export default function App() {
                 <Route
                     path="/"
                     element={
-                        <Page title="MathSite">
-                            <p>관리자가 허용한 수학 강의를 온라인으로 학습할 수 있습니다.</p>
-                            <p>
-                                <Link to="/info">학원 소개</Link> ·{' '}
-                                <Link to="/courses">강좌 보기</Link> ·{' '}
-                                <Link to="/boards">공지사항</Link>
-                            </p>
-                        </Page>
+                        <Page
+                            title="MathSite"
+                            slug="home"
+                            fallback={
+                                <>
+                                    <p>
+                                        관리자가 허용한 수학 강의를 온라인으로 학습할 수 있습니다.
+                                    </p>
+                                    <p>
+                                        <Link to="/info">학원 소개</Link> ·{' '}
+                                        <Link to="/courses">강좌 보기</Link> ·{' '}
+                                        <Link to="/boards">공지사항</Link>
+                                    </p>
+                                </>
+                            }
+                        />
                     }
                 />
                 <Route path="/login" element={<LoginPage />} />

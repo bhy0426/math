@@ -157,7 +157,7 @@ export default function RegisterPage() {
         .join('/');
     if (!loading && user) return <Navigate to="/user" replace />;
     return (
-        <Page title="회원가입" message={confirmation}>
+        <Page title="회원가입" slug="register" message={confirmation}>
             {!confirmation && fields && (
                 <>
                     <p>가입 신청이 완료되면 관리자가 승인한 뒤 로그인할 수 있습니다.</p>

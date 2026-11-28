@@ -28,6 +28,7 @@ export default function LoginPage() {
     return (
         <Page
             title="로그인"
+            slug="login"
             message={action.message || kakao.error || google.error || messages[result]}
         >
             {providers.map(({ key, label }) => (

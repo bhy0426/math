@@ -5,6 +5,7 @@ import { useAction } from './hooks';
 import { api } from './api';
 import PopupNotice from './PopupNotice';
 import { memberLabel } from './memberLabel.mjs';
+import { useReportWordPressSlug, useWordPressPage, WordPressContent } from './wordpress';
 
 export function Layout({ children }) {
     const { user, setUser, fields, error } = useAuth();
@@ -51,14 +52,25 @@ export function Layout({ children }) {
     );
 }
 
-export function Page({ title, message, children }) {
+// slug가 있으면 WordPress 관리자에서 같은 슬러그로 공개한 페이지의 제목과 본문을 보여 준다.
+// 페이지가 없거나 WordPress에 연결할 수 없으면 코드에 적힌 제목과 fallback을 보여 준다.
+export function Page({ title, slug, fallback, message, children }) {
+    const wordpress = useWordPressPage(slug);
+    useReportWordPressSlug(slug);
+    const page = wordpress.status === 'ready' ? wordpress.page : null;
+    const heading = page?.title || title;
     useEffect(() => {
-        document.title = `${title} | MathSite`;
-    }, [title]);
+        document.title = `${heading} | MathSite`;
+    }, [heading]);
     return (
         <>
-            <h2>{title}</h2>
+            <h2>{heading}</h2>
             <p role="status">{message}</p>
+            {page ? (
+                <WordPressContent html={page.html} />
+            ) : (
+                ['missing', 'error'].includes(wordpress.status) && fallback
+            )}
             {children}
         </>
     );
